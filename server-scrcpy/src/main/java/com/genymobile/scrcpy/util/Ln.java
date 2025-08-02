@@ -13,8 +13,8 @@ import java.io.PrintStream;
  */
 public final class Ln {
 
-    private static final String TAG = "scrcpy22";
-    private static final String PREFIX = "[server22] ";
+    private static final String TAG = "k-scrcpy";
+    private static final String PREFIX = "[k-server] ";
 
     private static final PrintStream CONSOLE_OUT = new PrintStream(new FileOutputStream(FileDescriptor.out));
     private static final PrintStream CONSOLE_ERR = new PrintStream(new FileOutputStream(FileDescriptor.err));

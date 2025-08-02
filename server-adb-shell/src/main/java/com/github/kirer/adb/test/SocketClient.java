@@ -23,21 +23,71 @@ public class SocketClient {
         
         try {
             Socket socket = new Socket(host, port);
-            
+
             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-            BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-            
+            java.io.InputStream in = socket.getInputStream();
+
             // 发送命令
             out.println(command);
-            
+
             // 读取响应
-            String response = in.readLine();
-            System.out.println("Response: " + response);
-            
+            handleResponse(in);
+
             socket.close();
-            
+
         } catch (Exception e) {
             System.err.println("Error: " + e.getMessage());
         }
+    }
+
+    private static void handleResponse(java.io.InputStream in) throws Exception {
+        // 读取第一行来判断响应类型
+        BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+        String firstLine = reader.readLine();
+
+        if (firstLine == null) {
+            System.err.println("No response received");
+            return;
+        }
+
+        if (firstLine.startsWith("BYTES:")) {
+            // 处理字节数组响应
+            handleBytesResponse(firstLine, in);
+        } else {
+            // 普通文本响应
+            System.out.println("Response: " + firstLine);
+        }
+    }
+
+    private static void handleBytesResponse(String header, java.io.InputStream in) throws Exception {
+        // 解析头部：BYTES:size:message
+        String[] parts = header.split(":", 3);
+        if (parts.length < 3) {
+            System.err.println("Invalid bytes header: " + header);
+            return;
+        }
+
+        int dataSize = Integer.parseInt(parts[1]);
+        String message = parts[2];
+
+        System.err.println("Response: OK " + message);
+        System.err.println("BYTES_SIZE: " + dataSize);
+
+        // 读取二进制数据
+        byte[] imageData = new byte[dataSize];
+        int totalRead = 0;
+        while (totalRead < dataSize) {
+            int bytesRead = in.read(imageData, totalRead, dataSize - totalRead);
+            if (bytesRead == -1) {
+                throw new Exception("Unexpected end of stream");
+            }
+            totalRead += bytesRead;
+        }
+
+        // 将二进制数据写入stdout
+        System.out.write(imageData);
+        System.out.flush();
+
+        System.err.println("Bytes data written to stdout (" + totalRead + " bytes)");
     }
 }

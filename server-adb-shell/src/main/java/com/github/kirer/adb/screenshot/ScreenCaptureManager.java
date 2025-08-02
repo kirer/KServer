@@ -94,9 +94,8 @@ public class ScreenCaptureManager {
     /**
      * 创建镜像VirtualDisplay
      *
-     * @throws Exception 创建失败时抛出异常
      */
-    private void createVirtualDisplay() throws Exception {
+    private void createVirtualDisplay() {
         if (displayInfo == null) {
             throw new IllegalStateException("Display info not available");
         }
@@ -155,9 +154,6 @@ public class ScreenCaptureManager {
 
     /**
      * 降级方案 创建显示
-     *
-     * @return
-     * @throws Exception
      */
     private static IBinder createDisplay() throws Exception {
         // Since Android 12 (preview), secure displays could not be created with shell permissions anymore.
@@ -229,36 +225,52 @@ public class ScreenCaptureManager {
      * @return 屏幕截图的Bitmap，失败时返回null
      */
     public Bitmap captureScreen() {
-        Image image = null;
+        return captureScreen(3000); // 默认等待3秒
+    }
+
+    /**
+     * 捕获屏幕截图（带超时）
+     *
+     * @param timeoutMs 等待图像的超时时间（毫秒）
+     * @return 屏幕截图的Bitmap，失败时返回null
+     */
+    public Bitmap captureScreen(long timeoutMs) {
         try {
-            Ln.d("Capturing screen...");
-            Bitmap bitmap = null;
-            if (imageReaderHandler != null) {
-                // 从ImageReader获取最新图像
-                image = imageReaderHandler.getLastImage();
-                if (image != null) {
-                    Ln.d("Capturing screen..." + image.getWidth() + "/" + image.getHeight());
-                    bitmap = BitmapConverter.imageToBitmap(image);
-                } else {
-                    Ln.d("Capturing screen... image is NULL");
-                }
+            if (imageReaderHandler == null) {
+                Ln.e("ImageReaderHandler is null");
+                return null;
             }
-            // 处理屏幕旋转
-            if (config.isAutoRotate() && displayInfo != null) {
+
+            byte[] pngBytes = imageReaderHandler.getLatestPngBytes();
+            if (pngBytes == null) {
+                return null;
+            }
+
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(pngBytes, 0, pngBytes.length);
+
+            if (bitmap != null && config.isAutoRotate() && displayInfo != null) {
                 int rotationAngle = BitmapConverter.getRotationAngle(displayInfo.getRotation());
                 if (rotationAngle != 0) {
-                    Ln.d("Rotating bitmap by " + rotationAngle + " degrees");
                     bitmap = BitmapConverter.rotateBitmap(bitmap, rotationAngle);
                 }
             }
-            Ln.d("Screen captured successfully: " + (bitmap != null ? bitmap.getWidth() + "x" + bitmap.getHeight() : "null"));
+
             return bitmap;
         } catch (Exception e) {
             Ln.e("Failed to capture screen", e);
             return null;
-        } finally {
-            if (image != null) image.close();
         }
+    }
+
+    /**
+     * 直接获取PNG字节数组
+     */
+    public byte[] capturePngBytes() {
+        if (imageReaderHandler == null) {
+            Ln.e("ImageReaderHandler is null");
+            return null;
+        }
+        return imageReaderHandler.getLatestPngBytes();
     }
 
     /**

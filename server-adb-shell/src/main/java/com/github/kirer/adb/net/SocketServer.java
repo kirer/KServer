@@ -100,20 +100,29 @@ public class SocketServer {
      */
     private void handleClient(Socket clientSocket) {
         String clientAddress = clientSocket.getRemoteSocketAddress().toString();
-        Ln.d("Client connected: " + clientAddress);
-        
+
         try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-             PrintWriter out = new PrintWriter(clientSocket.getOutputStream(), true)) {
-            
+             java.io.OutputStream out = clientSocket.getOutputStream()) {
+
             String request = in.readLine();
             if (request != null) {
-                Ln.d("Received request: " + request);
-                String response = commandProcessor.processCommand(request);
-                out.println(response);
-                Ln.d("Sent response: " + response);
+                CommandResult result = commandProcessor.execute(request);
+
+                if (result.getType() == CommandResult.Type.BYTES) {
+                    handleBytesResponse(out, result);
+                } else {
+                    String response = result.toStringResponse();
+                    try (java.io.PrintWriter textOut = new java.io.PrintWriter(out, true)) {
+                        textOut.println(response);
+                    }
+                }
+            } else {
+                Ln.w("Received null request from " + clientAddress);
             }
-            
+
         } catch (IOException e) {
+            Ln.e("IO error handling client " + clientAddress, e);
+        } catch (Exception e) {
             Ln.e("Error handling client " + clientAddress, e);
         } finally {
             try {
@@ -122,6 +131,26 @@ public class SocketServer {
                 Ln.w("Error closing client socket", e);
             }
             Ln.d("Client disconnected: " + clientAddress);
+        }
+    }
+
+    /**
+     * 处理字节数组响应，发送二进制数据
+     */
+    private void handleBytesResponse(java.io.OutputStream out, CommandResult result) throws IOException {
+        byte[] imageBytes = (byte[]) result.getData();
+        if (imageBytes != null) {
+            // 发送协议头：消息类型 + 数据长度 + 消息
+            String header = "BYTES:" + imageBytes.length + ":" + result.getMessage() + "\n";
+            out.write(header.getBytes("UTF-8"));
+
+            // 发送二进制数据
+            out.write(imageBytes);
+            out.flush();
+        } else {
+            String errorResponse = "ERROR Bytes data is null\n";
+            out.write(errorResponse.getBytes("UTF-8"));
+            out.flush();
         }
     }
     

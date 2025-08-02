@@ -30,38 +30,47 @@ public class CommandProcessor {
      * 处理命令请求
      */
     public String processCommand(String request) {
+        CommandResult result = execute(request);
+        return result.toStringResponse();
+    }
+
+    /**
+     * 处理命令请求并返回结果对象
+     */
+    public CommandResult execute(String request) {
         if (request == null || request.trim().isEmpty()) {
-            return "ERROR Empty command";
+            return CommandResult.error("Empty command");
         }
-        
+
         try {
             String[] parts = request.trim().split("\\s+");
             String commandName = parts[0].toLowerCase();
             String[] params = new String[parts.length - 1];
             System.arraycopy(parts, 1, params, 0, params.length);
-            
+
             Ln.d("Processing command: " + commandName);
-            
+
             // 内置命令
             if ("help".equals(commandName)) {
-                return handleHelpCommand();
+                return CommandResult.success(handleHelpCommand().substring(3)); // 移除 "OK " 前缀
             }
-            
+
             if ("status".equals(commandName)) {
-                return "OK Service running with " + commands.size() + " commands";
+                return CommandResult.success("Service running with " + commands.size() + " commands");
             }
-            
+
             // 查找并执行注册的命令
             ServiceCommand command = commands.get(commandName);
             if (command == null) {
-                return "ERROR Unknown command: " + commandName;
+                return CommandResult.error("Unknown command: " + commandName);
             }
-            
+
+            // 执行命令
             return command.execute(params);
-            
+
         } catch (Exception e) {
             Ln.e("Error processing command: " + request, e);
-            return "ERROR " + e.getMessage();
+            return CommandResult.error(e.getMessage());
         }
     }
     

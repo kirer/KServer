@@ -11,7 +11,7 @@ public class ScreenshotConfig {
     // 默认配置值
     public static final int DEFAULT_DISPLAY_ID = 0;
     public static final int DEFAULT_IMAGE_FORMAT = PixelFormat.RGBA_8888;
-    public static final int DEFAULT_MAX_IMAGES = 10;
+    public static final int DEFAULT_MAX_IMAGES = 2;
     public static final boolean DEFAULT_AUTO_ROTATE = true;
 
     private int displayId;           // 显示器ID，默认主显示器

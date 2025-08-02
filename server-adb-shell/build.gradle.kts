@@ -1,12 +1,18 @@
 import org.gradle.internal.os.OperatingSystem
 plugins {
     id("java-library")
-
+    alias(libs.plugins.jetbrains.kotlin.jvm)
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     targetCompatibility = JavaVersion.VERSION_1_8
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
 }
 
 val androidJar = "${System.getenv("ANDROID_HOME")}/platforms/android-35/android.jar"
@@ -24,6 +30,8 @@ dependencies{
 
 tasks.register<Exec>("buildDex") {
     dependsOn(tasks.jar)
+    // 确保依赖项目的jar也被构建
+    dependsOn(":server-scrcpy:jar")
     group = "build"
     description = "Convert jar to dex using d8"
     val dexOut = layout.buildDirectory.dir("dex").get().asFile

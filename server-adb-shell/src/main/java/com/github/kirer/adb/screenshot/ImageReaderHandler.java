@@ -8,8 +8,8 @@ import android.view.Surface;
 
 import com.genymobile.scrcpy.util.Ln;
 
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicReference;
+
 
 /**
  * ImageReader处理器，负责管理ImageReader的创建、配置和图像获取
@@ -21,9 +21,8 @@ public class ImageReaderHandler {
     private Handler backgroundHandler;
     private final ScreenshotConfig config;
 
-    // 用于同步图像获取
-    private final AtomicReference<Image> latestImage = new AtomicReference<>();
-    private CountDownLatch imageLatch;
+    // 缓存PNG字节数组而不是Image对象
+    private final AtomicReference<byte[]> cachedPngBytes = new AtomicReference<>();
 
     /**
      * 创建ImageReaderHandler实例
@@ -57,7 +56,16 @@ public class ImageReaderHandler {
             imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
                 @Override
                 public void onImageAvailable(ImageReader reader) {
-                    handleImageAvailable(reader);
+                    try (Image image = reader.acquireLatestImage()) {
+                        if (image != null) {
+                            byte[] pngBytes = imageToBytes(image);
+                            if (pngBytes != null) {
+                                cachedPngBytes.set(pngBytes);
+                            }
+                        }
+                    } catch (Exception e) {
+                        Ln.w("Error processing new image", e);
+                    }
                 }
             }, backgroundHandler);
             Ln.i("ImageReader created successfully");
@@ -91,43 +99,77 @@ public class ImageReaderHandler {
     }
 
     /**
-     * 获取最新的图像
+     * 获取最新的PNG字节数组
      *
-     * @return 最新的Image对象
+     * @return PNG字节数组，如果没有则返回null
      */
-    public Image getLastImage() {
-        return latestImage.get();
+    public byte[] getLatestPngBytes() {
+        byte[] cached = cachedPngBytes.get();
+        if (cached != null) {
+            return cached;
+        }
+
+        if (imageReader == null) {
+            Ln.e("ImageReader not available");
+            return null;
+        }
+
+        try (Image image = imageReader.acquireLatestImage()) {
+            if (image != null) {
+                byte[] pngBytes = imageToBytes(image);
+                if (pngBytes != null) {
+                    cachedPngBytes.set(pngBytes);
+                    return pngBytes;
+                }
+            }
+        } catch (Exception e) {
+            Ln.w("Failed to acquire image", e);
+        }
+        return null;
     }
 
     /**
-     * 处理图像可用回调
+     * 直接从Image转换为PNG字节数组
      */
-    private void handleImageAvailable(ImageReader reader) {
+    private byte[] imageToBytes(Image image) {
         try {
-            Image image = reader.acquireLatestImage();
-            if (image != null) {
-                // 关闭之前的图像
-                Image oldImage = latestImage.getAndSet(image);
-                if (oldImage != null) {
-                    try {
-                        oldImage.close();
-                    } catch (Exception e) {
-                        Ln.w("Failed to close old image", e);
-                    }
-                }
-                // 通知等待的线程
-                CountDownLatch latch = imageLatch;
-                if (latch != null) {
-                    latch.countDown();
-                }
-                Ln.d("New image available: " + image.getWidth() + "x" + image.getHeight());
+            // 获取Image的像素数据
+            Image.Plane[] planes = image.getPlanes();
+            if (planes.length == 0) {
+                Ln.e("Image has no planes");
+                return null;
             }
+
+            Image.Plane plane = planes[0];
+            java.nio.ByteBuffer buffer = plane.getBuffer();
+
+            int width = image.getWidth();
+            int height = image.getHeight();
+            int pixelStride = plane.getPixelStride();
+            int rowStride = plane.getRowStride();
+            int rowPadding = rowStride - pixelStride * width;
+
+            // 创建Bitmap
+            android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(
+                    width + rowPadding / pixelStride, height, android.graphics.Bitmap.Config.ARGB_8888);
+            bitmap.copyPixelsFromBuffer(buffer);
+
+            // 如果有padding，需要裁剪
+            if (rowPadding != 0) {
+                bitmap = android.graphics.Bitmap.createBitmap(bitmap, 0, 0, width, height);
+            }
+
+            // 压缩为PNG
+            try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream()) {
+                bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, baos);
+                return baos.toByteArray();
+            } finally {
+                bitmap.recycle();
+            }
+
         } catch (Exception e) {
-            Ln.e("Error handling image available", e);
-            CountDownLatch latch = imageLatch;
-            if (latch != null) {
-                latch.countDown();
-            }
+            Ln.e("Failed to convert image to bytes", e);
+            return null;
         }
     }
 
@@ -145,21 +187,6 @@ public class ImageReaderHandler {
      */
     public void close() {
         Ln.d("Closing ImageReaderHandler");
-        // 清理最新图像
-        Image image = latestImage.getAndSet(null);
-        if (image != null) {
-            try {
-                image.close();
-            } catch (Exception e) {
-                Ln.w("Failed to close latest image", e);
-            }
-        }
-        // 释放等待的线程
-        CountDownLatch latch = imageLatch;
-        if (latch != null) {
-            latch.countDown();
-            imageLatch = null;
-        }
         // 关闭ImageReader
         if (imageReader != null) {
             try {
