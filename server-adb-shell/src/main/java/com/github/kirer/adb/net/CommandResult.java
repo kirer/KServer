@@ -10,7 +10,8 @@ public class CommandResult {
         STRING,    // 字符串结果
         BYTES,     // 字节数组
         BOOLEAN,   // 布尔值
-        ERROR      // 错误信息
+        ERROR,     // 错误信息
+        STREAMING  // 流式传输
     }
     
     private final Type type;
@@ -51,6 +52,13 @@ public class CommandResult {
      */
     public static CommandResult error(String message) {
         return new CommandResult(Type.ERROR, null, message, false);
+    }
+
+    /**
+     * 创建流式传输结果
+     */
+    public static CommandResult streaming(Object streamingData, String message) {
+        return new CommandResult(Type.STREAMING, streamingData, message, true);
     }
     
     // Getters

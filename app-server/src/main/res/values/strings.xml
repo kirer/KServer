@@ -1,0 +1,57 @@
+<resources>
+    <string name="app_name">KServer Client</string>
+
+    <!-- Shizuku相关 -->
+    <string name="shizuku_not_installed">Shizuku未安装</string>
+    <string name="shizuku_not_running">Shizuku未运行</string>
+    <string name="shizuku_permission_denied">Shizuku权限被拒绝</string>
+    <string name="shizuku_permission_granted">Shizuku权限已授予</string>
+    <string name="request_shizuku_permission">请求Shizuku权限</string>
+
+    <!-- KServer相关 -->
+    <string name="start_kserver">启动KServer</string>
+    <string name="stop_kserver">停止KServer</string>
+    <string name="kserver_starting">正在启动KServer...</string>
+    <string name="kserver_started">KServer已启动</string>
+    <string name="kserver_stopped">KServer已停止</string>
+    <string name="kserver_start_failed">KServer启动失败</string>
+
+    <!-- 截图相关 -->
+    <string name="take_screenshot">截图</string>
+    <string name="screenshot_png">PNG截图</string>
+    <string name="screenshot_jpeg">JPEG截图</string>
+    <string name="screenshot_raw">RAW截图</string>
+    <string name="screenshot_streaming">流式截图</string>
+    <string name="screenshot_success">截图成功</string>
+    <string name="screenshot_failed">截图失败</string>
+    <string name="save_screenshot">保存截图</string>
+
+    <!-- 性能测试 -->
+    <string name="run_benchmark">运行基准测试</string>
+    <string name="benchmark_running">基准测试运行中...</string>
+    <string name="benchmark_completed">基准测试完成</string>
+    <string name="memory_test">内存测试</string>
+
+    <!-- 状态信息 -->
+    <string name="status_disconnected">未连接</string>
+    <string name="status_connecting">连接中...</string>
+    <string name="status_connected">已连接</string>
+    <string name="status_error">错误</string>
+
+    <!-- 按钮文本 -->
+    <string name="connect">连接</string>
+    <string name="disconnect">断开</string>
+    <string name="clear_log">清空日志</string>
+    <string name="refresh">刷新</string>
+
+    <!-- 错误信息 -->
+    <string name="error_network">网络错误</string>
+    <string name="error_permission">权限错误</string>
+    <string name="error_unknown">未知错误</string>
+
+    <!-- 性能信息 -->
+    <string name="performance_time">处理时间: %dms</string>
+    <string name="performance_size">数据大小: %s</string>
+    <string name="performance_throughput">吞吐量: %.2f/s</string>
+
+</resources>

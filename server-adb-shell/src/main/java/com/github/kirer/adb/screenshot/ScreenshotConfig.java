@@ -11,8 +11,12 @@ public class ScreenshotConfig {
     // 默认配置值
     public static final int DEFAULT_DISPLAY_ID = 0;
     public static final int DEFAULT_IMAGE_FORMAT = PixelFormat.RGBA_8888;
-    public static final int DEFAULT_MAX_IMAGES = 2;
+    public static final int DEFAULT_MAX_IMAGES = 4; // 增加缓冲区数量
     public static final boolean DEFAULT_AUTO_ROTATE = true;
+
+    // 性能优化配置
+    public static final int OPTIMIZED_MAX_IMAGES = 6; // 高性能模式的缓冲区数量
+    public static final int BUFFER_POOL_SIZE = 8; // 缓冲池大小
 
     private int displayId;           // 显示器ID，默认主显示器
     private int imageFormat;         // 图像格式
@@ -117,6 +121,24 @@ public class ScreenshotConfig {
      */
     public static ScreenshotConfig forDisplay(int displayId) {
         ScreenshotConfig config = new ScreenshotConfig();
+        config.setDisplayId(displayId);
+        return config;
+    }
+
+    /**
+     * 创建高性能优化配置
+     */
+    public static ScreenshotConfig createOptimized() {
+        ScreenshotConfig config = new ScreenshotConfig();
+        config.setMaxImages(OPTIMIZED_MAX_IMAGES);
+        return config;
+    }
+
+    /**
+     * 创建指定显示器的高性能配置
+     */
+    public static ScreenshotConfig createOptimizedForDisplay(int displayId) {
+        ScreenshotConfig config = createOptimized();
         config.setDisplayId(displayId);
         return config;
     }

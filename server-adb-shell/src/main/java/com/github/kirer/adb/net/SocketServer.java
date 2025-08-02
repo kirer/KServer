@@ -110,6 +110,8 @@ public class SocketServer {
 
                 if (result.getType() == CommandResult.Type.BYTES) {
                     handleBytesResponse(out, result);
+                } else if (result.getType() == CommandResult.Type.STREAMING) {
+                    handleStreamingResponse(out, result);
                 } else {
                     String response = result.toStringResponse();
                     try (java.io.PrintWriter textOut = new java.io.PrintWriter(out, true)) {
@@ -149,6 +151,37 @@ public class SocketServer {
             out.flush();
         } else {
             String errorResponse = "ERROR Bytes data is null\n";
+            out.write(errorResponse.getBytes("UTF-8"));
+            out.flush();
+        }
+    }
+
+    /**
+     * 处理流式传输响应
+     */
+    private void handleStreamingResponse(java.io.OutputStream out, CommandResult result) throws IOException {
+        try {
+            Object streamingData = result.getData();
+            if (streamingData instanceof StreamingScreenshotCommand.StreamingResult) {
+                StreamingScreenshotCommand.StreamingResult streamingResult =
+                    (StreamingScreenshotCommand.StreamingResult) streamingData;
+
+                // 发送成功响应头
+                String header = "STREAMING:OK:" + result.getMessage() + "\n";
+                out.write(header.getBytes("UTF-8"));
+                out.flush();
+
+                // 使用流式协议发送数据
+                streamingResult.sendToStream(out);
+
+            } else {
+                String errorResponse = "ERROR Invalid streaming data type\n";
+                out.write(errorResponse.getBytes("UTF-8"));
+                out.flush();
+            }
+        } catch (Exception e) {
+            Ln.e("Error handling streaming response", e);
+            String errorResponse = "ERROR Streaming failed: " + e.getMessage() + "\n";
             out.write(errorResponse.getBytes("UTF-8"));
             out.flush();
         }

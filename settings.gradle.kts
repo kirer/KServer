@@ -23,3 +23,4 @@ rootProject.name = "KServer"
 include(":app")
 include(":server-adb-shell")
 include(":server-scrcpy")
+include(":app-server")

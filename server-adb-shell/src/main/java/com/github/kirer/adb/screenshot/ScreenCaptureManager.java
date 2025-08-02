@@ -16,6 +16,7 @@ import com.genymobile.scrcpy.wrappers.DisplayManager;
 import com.genymobile.scrcpy.wrappers.ServiceManager;
 import com.genymobile.scrcpy.wrappers.SurfaceControl;
 import com.github.kirer.adb.utils.BitmapConverter;
+import com.github.kirer.adb.image.OptimizedImageProcessor;
 
 /**
  * 屏幕捕获管理器，负责管理VirtualDisplay和ImageReader的集成
@@ -241,12 +242,12 @@ public class ScreenCaptureManager {
                 return null;
             }
 
-            byte[] pngBytes = imageReaderHandler.getLatestPngBytes();
-            if (pngBytes == null) {
+            byte[] imageBytes = imageReaderHandler.getLatestImageBytes();
+            if (imageBytes == null) {
                 return null;
             }
 
-            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(pngBytes, 0, pngBytes.length);
+            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
 
             if (bitmap != null && config.isAutoRotate() && displayInfo != null) {
                 int rotationAngle = BitmapConverter.getRotationAngle(displayInfo.getRotation());
@@ -274,10 +275,79 @@ public class ScreenCaptureManager {
     }
 
     /**
+     * 捕获图像字节数组（当前格式）
+     *
+     * @return 图像字节数组，失败时返回null
+     */
+    public byte[] captureImageBytes() {
+        if (imageReaderHandler == null) {
+            Ln.e("ImageReaderHandler is null");
+            return null;
+        }
+        return imageReaderHandler.getLatestImageBytes();
+    }
+
+    /**
+     * 设置输出格式
+     *
+     * @param format 输出格式
+     * @param quality 压缩质量（0-100，仅对JPEG和WebP有效）
+     */
+    public void setOutputFormat(OptimizedImageProcessor.OutputFormat format, int quality) {
+        if (imageReaderHandler == null) {
+            Ln.w("ImageReaderHandler is null, cannot set output format");
+            return;
+        }
+
+        OptimizedImageProcessor.CompressionConfig config;
+        switch (format) {
+            case RAW_RGBA:
+                config = OptimizedImageProcessor.CompressionConfig.rawRgba();
+                break;
+            case PNG:
+                config = OptimizedImageProcessor.CompressionConfig.png();
+                break;
+            case JPEG:
+                config = OptimizedImageProcessor.CompressionConfig.jpeg(quality);
+                break;
+            case WEBP:
+                config = OptimizedImageProcessor.CompressionConfig.webp(quality);
+                break;
+            default:
+                Ln.w("Unsupported output format: " + format);
+                return;
+        }
+
+        imageReaderHandler.setCompressionConfig(config);
+        Ln.i("Output format set to: " + format + (quality < 100 ? ", quality=" + quality : ""));
+    }
+
+    /**
+     * 获取处理结果（包含元数据）
+     *
+     * @return 处理结果，失败时返回null
+     */
+    public OptimizedImageProcessor.ProcessResult captureProcessResult() {
+        if (imageReaderHandler == null) {
+            Ln.e("ImageReaderHandler is null");
+            return null;
+        }
+        return imageReaderHandler.getLatestProcessResult();
+    }
+
+    /**
      * 清理资源
      */
     public void cleanup() {
         Ln.i("Cleaning up ScreenCaptureManager...");
+
+        // 打印性能统计
+        if (imageReaderHandler != null) {
+            imageReaderHandler.logStatistics();
+            imageReaderHandler.close();
+            imageReaderHandler = null;
+        }
+
         stopCapture();
         initialized = false;
         displayInfo = null;
