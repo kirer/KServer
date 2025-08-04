@@ -157,28 +157,14 @@ public class SocketServer {
     }
 
     /**
-     * 处理流式传输响应
+     * 处理流式传输响应（简化版：暂时禁用流式传输）
      */
     private void handleStreamingResponse(java.io.OutputStream out, CommandResult result) throws IOException {
         try {
-            Object streamingData = result.getData();
-            if (streamingData instanceof StreamingScreenshotCommand.StreamingResult) {
-                StreamingScreenshotCommand.StreamingResult streamingResult =
-                    (StreamingScreenshotCommand.StreamingResult) streamingData;
-
-                // 发送成功响应头
-                String header = "STREAMING:OK:" + result.getMessage() + "\n";
-                out.write(header.getBytes("UTF-8"));
-                out.flush();
-
-                // 使用流式协议发送数据
-                streamingResult.sendToStream(out);
-
-            } else {
-                String errorResponse = "ERROR Invalid streaming data type\n";
-                out.write(errorResponse.getBytes("UTF-8"));
-                out.flush();
-            }
+            // 简化版：暂时禁用流式传输功能，直接返回错误
+            String errorResponse = "ERROR Streaming not supported in simplified version\n";
+            out.write(errorResponse.getBytes("UTF-8"));
+            out.flush();
         } catch (Exception e) {
             Ln.e("Error handling streaming response", e);
             String errorResponse = "ERROR Streaming failed: " + e.getMessage() + "\n";

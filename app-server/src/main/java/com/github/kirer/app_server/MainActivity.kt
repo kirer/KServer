@@ -1,6 +1,8 @@
 package com.github.kirer.app_server
 
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.Handler
@@ -50,24 +52,17 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-
-        // 设置状态栏颜色（必须在setContentView之后）
-        setupStatusBar()
-
         // 启动标题计数器
         startTitleCounter()
-
         // 初始化管理器
         shizukuManager = ShizukuManager(this)
         kServerManager = KServerManager(this)
-
         shizukuManager.initialize { status ->
             runOnUiThread {
                 viewModel.updateShizukuStatus(status)
                 addLog("Shizuku状态更新: $status")
             }
         }
-
         // 处理系统窗口插入，避免标题栏遮盖内容
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { view, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -79,13 +74,10 @@ class MainActivity : AppCompatActivity() {
             )
             insets
         }
-
         setupUI()
         setupObservers()
-
         // 添加Shizuku权限监听器
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
-
         // 初始状态检查（延迟执行，等待binder连接）
         lifecycleScope.launch {
             kotlinx.coroutines.delay(1000) // 等待1秒让binder连接
@@ -130,7 +122,6 @@ class MainActivity : AppCompatActivity() {
         titleUpdateRunnable = null
     }
 
-
     private fun setupUI() {
         // 请求Shizuku权限
         binding.btnRequestPermission.setOnClickListener {
@@ -152,24 +143,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        // 截图按钮
-        binding.btnScreenshotPng.setOnClickListener {
-            takeScreenshot("png")
+        // 截图按钮（简化版：只支持RAW格式）
+        binding.btnScreenshot.setOnClickListener {
+            takeScreenshot()
         }
-        
-        binding.btnScreenshotJpeg.setOnClickListener {
-            takeScreenshot("jpeg", 90)
-        }
-        
-        binding.btnScreenshotRaw.setOnClickListener {
-            takeScreenshot("raw")
-        }
-        
-        // 基准测试
-        binding.btnBenchmark.setOnClickListener {
-            runBenchmark()
-        }
-        
+
         // 清空日志
         binding.btnClearLog.setOnClickListener {
             binding.tvLog.text = ""
@@ -276,17 +254,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * 更新截图按钮状态
+     * 更新截图按钮状态（简化版：只有RAW格式按钮）
      */
     private fun updateScreenshotButtonsState() {
         val isKServerRunning = viewModel.isKServerRunning.value ?: false
         val isConnected = viewModel.connectionStatus.value == KServerClient.ConnectionStatus.CONNECTED
         val screenshotEnabled = isKServerRunning && isConnected
 
-        binding.btnScreenshotPng.isEnabled = screenshotEnabled
-        binding.btnScreenshotJpeg.isEnabled = screenshotEnabled
-        binding.btnScreenshotRaw.isEnabled = screenshotEnabled
-        binding.btnBenchmark.isEnabled = screenshotEnabled
+        binding.btnScreenshot.isEnabled = screenshotEnabled
+        // btnBenchmark 已删除，简化版不需要
 
         // 添加调试日志
         addLog("按钮状态更新: KServer运行=$isKServerRunning, 连接=$isConnected, 按钮启用=$screenshotEnabled")
@@ -343,7 +319,6 @@ class MainActivity : AppCompatActivity() {
                 if (success) {
                     addLog("KServer启动成功")
                     viewModel.updateKServerStatus(true)
-
                     // 等待一下然后检查连接
                     kotlinx.coroutines.delay(3000)
                     checkConnection()
@@ -413,23 +388,20 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun takeScreenshot(format: String, quality: Int = 100) {
-        addLog("开始截图 ($format)...")
+    private fun takeScreenshot() {
+        addLog("开始截图（简化版：只支持RAW格式）...")
 
         lifecycleScope.launch {
             try {
                 val startTime = System.currentTimeMillis()
-
-                // 直接使用KServerManager进行截图
-                val screenshotData = kServerManager.testScreenshot(format)
+                // 直接使用KServerManager进行截图（简化版：只支持RAW格式）
+                val screenshotData = kServerManager.testScreenshot()
                 val totalTime = System.currentTimeMillis() - startTime
-
                 if (screenshotData != null) {
                     addLog("截图成功，大小: ${screenshotData.size} bytes")
                     addLog("总耗时: ${totalTime}ms")
-
                     // 显示截图
-                    displayScreenshot(screenshotData, format, screenshotData.size)
+                    displayScreenshot(screenshotData, screenshotData.size)
                 } else {
                     addLog("截图失败")
                     showToast("截图失败")
@@ -441,35 +413,59 @@ class MainActivity : AppCompatActivity() {
         }
     }
     
-    private fun displayScreenshot(data: ByteArray, format: String, size: Int) {
+    @SuppressLint("UseKtx", "SetTextI18n")
+    private fun displayScreenshot(data: ByteArray, size: Int) {
         try {
-            val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
+            // server-adb-shell 返回的是 RAW RGBA 格式数据
+            val pixelCount = data.size / 4 // RGBA = 4 bytes per pixel
+            addLog("RAW RGBA数据，大小: ${data.size} bytes，像素数: $pixelCount")
+
+            // 尝试常见分辨率来匹配像素数
+            val possibleResolutions = listOf(
+                Pair(1080, 2400), Pair(1080, 2340), Pair(1080, 1920),
+                Pair(1440, 3200), Pair(1440, 2960), Pair(1440, 2560),
+                Pair(720, 1600), Pair(720, 1520), Pair(720, 1280),
+                Pair(1200, 2640), Pair(828, 1792), Pair(750, 1334)
+            )
+
+            var bitmap: Bitmap? = null
+            for ((w, h) in possibleResolutions) {
+                if (w * h == pixelCount) {
+                    addLog("匹配分辨率: ${w}x${h}")
+                    try {
+                        bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+                        val buffer = java.nio.ByteBuffer.wrap(data)
+                        bitmap.copyPixelsFromBuffer(buffer)
+                        addLog("RAW RGBA解码成功: ${w}x${h}")
+                        break
+                    } catch (e: Exception) {
+                        addLog("尝试分辨率 ${w}x${h} 失败: ${e.message}")
+                        bitmap = null
+                    }
+                }
+            }
+
             if (bitmap != null) {
                 binding.ivScreenshot.setImageBitmap(bitmap)
-                
                 val sizeText = formatFileSize(size)
-                binding.tvImageInfo.text = "格式: $format, 大小: $sizeText, 分辨率: ${bitmap.width}x${bitmap.height}"
-                
+                binding.tvImageInfo.text = "格式: RAW RGBA, 大小: $sizeText, 分辨率: ${bitmap.width}x${bitmap.height}"
                 addLog("截图显示成功: ${bitmap.width}x${bitmap.height}, $sizeText")
             } else {
-                addLog("无法解码截图数据")
+                addLog("无法找到匹配的分辨率，像素数: $pixelCount")
+                // 显示可能的分辨率组合
+                val sqrt = kotlin.math.sqrt(pixelCount.toDouble()).toInt()
+                addLog("可能的分辨率组合:")
+                for (w in (sqrt-50)..(sqrt+50)) {
+                    if (w > 0 && pixelCount % w == 0) {
+                        val h = pixelCount / w
+                        if (h > 0 && w <= h) { // 只显示竖屏比例
+                            addLog("  ${w}x${h}")
+                        }
+                    }
+                }
             }
         } catch (e: Exception) {
             addLog("显示截图时出错: ${e.message}")
-        }
-    }
-    
-    private fun runBenchmark() {
-        addLog("开始基准测试...")
-
-        lifecycleScope.launch {
-            try {
-                val result = kServerManager.runBenchmark()
-                addLog("基准测试结果:")
-                addLog(result)
-            } catch (e: Exception) {
-                addLog("基准测试时出错: ${e.message}")
-            }
         }
     }
     
@@ -490,25 +486,4 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 设置状态栏
-     */
-    private fun setupStatusBar() {
-        // 设置状态栏颜色为主题色
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.LOLLIPOP) {
-            window.statusBarColor = ContextCompat.getColor(this, R.color.purple_700)
-        }
-
-        // 使用WindowInsetsController设置状态栏文字颜色
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-            window.insetsController?.setSystemBarsAppearance(
-                0, // 清除APPEARANCE_LIGHT_STATUS_BARS，使用白色文字
-                android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-            )
-        } else {
-            // 兼容旧版本
-            @Suppress("DEPRECATION")
-            window.decorView.systemUiVisibility = 0
-        }
-    }
 }

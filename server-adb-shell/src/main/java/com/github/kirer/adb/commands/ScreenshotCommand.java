@@ -1,22 +1,23 @@
 package com.github.kirer.adb.commands;
 
-import android.graphics.Bitmap;
 import com.genymobile.scrcpy.util.Ln;
 import com.github.kirer.adb.net.CommandResult;
 import com.github.kirer.adb.net.ServiceCommand;
 import com.github.kirer.adb.screenshot.ScreenshotService;
 
+import java.io.FileOutputStream;
+
 /**
  * 截图命令实现 - 支持保存文件和返回bitmap字节数组
  */
 public class ScreenshotCommand implements ServiceCommand {
-    
+
     private final ScreenshotService screenshotService;
-    
+
     public ScreenshotCommand(ScreenshotService screenshotService) {
         this.screenshotService = screenshotService;
     }
-    
+
     @Override
     public CommandResult execute(String[] params) {
         try {
@@ -24,22 +25,17 @@ public class ScreenshotCommand implements ServiceCommand {
             if (!screenshotService.isRunning()) {
                 return CommandResult.error("Screenshot service is not running");
             }
-
             if (params.length == 0) {
                 // 无参数：返回bitmap字节数组
                 return getBitmapResult();
-            } else {
-                // 有参数：保存到文件
-                String outputPath = params[0];
-
-                // 验证路径
-                if (outputPath.trim().isEmpty()) {
-                    return CommandResult.error("Invalid output path");
-                }
-
-                return saveToFileResult(outputPath);
             }
-
+            // 有参数：保存到文件
+            String outputPath = params[0];
+            // 验证路径
+            if (outputPath.trim().isEmpty()) {
+                return CommandResult.error("Invalid output path");
+            }
+            return saveBitmapResult(outputPath);
         } catch (Exception e) {
             Ln.e("Error executing screenshot command", e);
             return CommandResult.error(e.getMessage());
@@ -47,54 +43,44 @@ public class ScreenshotCommand implements ServiceCommand {
     }
 
     /**
-     * 获取PNG字节数组
-     */
-    private byte[] capturePngBytes() {
-        return screenshotService.takePngBytes();
-    }
-
-    /**
-     * 获取PNG字节数组结果
+     * 获取RAW RGBA字节数组结果
      */
     private CommandResult getBitmapResult() {
         long startTime = System.currentTimeMillis();
-        byte[] pngBytes = capturePngBytes();
+        byte[] bytes = screenshotService.getLatestImageBytes();
         long duration = System.currentTimeMillis() - startTime;
-
-        if (pngBytes != null) {
-            String message = "PNG bytes captured in " + duration + "ms, bytes: " + pngBytes.length;
-            return CommandResult.bytes(pngBytes, message);
+        if (bytes != null) {
+            String message = "RAW RGBA bytes captured in " + duration + "ms, bytes: " + bytes.length;
+            return CommandResult.bytes(bytes, message);
         } else {
-            return CommandResult.error("Failed to capture PNG bytes after " + duration + "ms");
+            return CommandResult.error("Failed to capture RAW RGBA bytes after " + duration + "ms");
         }
     }
 
     /**
      * 保存到文件并返回布尔结果
      */
-    private CommandResult saveToFileResult(String outputPath) {
-        byte[] pngBytes = capturePngBytes();
-        if (pngBytes == null) {
-            return CommandResult.bool(false, "Failed to capture PNG bytes");
+    private CommandResult saveBitmapResult(String outputPath) {
+        byte[] bytes =  screenshotService.getLatestImageBytes();
+        if (bytes == null) {
+            return CommandResult.bool(false, "Failed to capture RAW RGBA bytes");
         }
-
-        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outputPath)) {
-            fos.write(pngBytes);
+        try (FileOutputStream fos = new FileOutputStream(outputPath)) {
+            fos.write(bytes);
             fos.flush();
-
-            String message = "Screenshot saved to " + outputPath + " (" + pngBytes.length + " bytes)";
+            String message = "Screenshot saved to " + outputPath + " (" + bytes.length + " bytes)";
             return CommandResult.bool(true, message);
         } catch (Exception e) {
             Ln.e("Failed to save screenshot", e);
             return CommandResult.bool(false, "Failed to save screenshot: " + e.getMessage());
         }
     }
-    
+
     @Override
     public String getCommandName() {
         return "screenshot";
     }
-    
+
     @Override
     public String getHelp() {
         return "Take a screenshot. Usage: screenshot [output_path] - with path: save to file, without path: return bitmap data";

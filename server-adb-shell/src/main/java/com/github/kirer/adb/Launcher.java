@@ -3,15 +3,12 @@ package com.github.kirer.adb;
 import android.os.Looper;
 
 import com.genymobile.scrcpy.util.Ln;
+import com.github.kirer.adb.commands.ScreenshotCommand;
 import com.github.kirer.adb.net.CommandProcessor;
 import com.github.kirer.adb.net.CommandResult;
 import com.github.kirer.adb.net.SocketServer;
 import com.github.kirer.adb.screenshot.ScreenshotConfig;
 import com.github.kirer.adb.screenshot.ScreenshotService;
-import com.github.kirer.adb.commands.ScreenshotCommand;
-import com.github.kirer.adb.net.OptimizedScreenshotCommand;
-import com.github.kirer.adb.net.StreamingScreenshotCommand;
-import com.github.kirer.adb.net.BenchmarkCommand;
 
 public class Launcher {
     private static final String VERSION = "1.0.0";
@@ -194,9 +191,6 @@ public class Launcher {
             CommandProcessor commandProcessor = new CommandProcessor();
             // 注册命令
             commandProcessor.registerCommand(new ScreenshotCommand(screenshotService));
-            commandProcessor.registerCommand(new OptimizedScreenshotCommand(screenshotService));
-            commandProcessor.registerCommand(new StreamingScreenshotCommand(screenshotService));
-            commandProcessor.registerCommand(new BenchmarkCommand());
             // 创建并启动Socket服务器
             SocketServer socketServer = new SocketServer(socketPort, commandProcessor);
             socketServer.start();

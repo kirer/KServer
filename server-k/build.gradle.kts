@@ -20,7 +20,7 @@ android {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
 
-        ndkVersion = "29.0.13113456"
+//        ndkVersion = "29.0.13113456"
 
         // 配置CMake
         externalNativeBuild {

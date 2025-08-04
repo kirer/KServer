@@ -1,6 +1,7 @@
 package com.github.kirer.adb.net;
 
 import com.genymobile.scrcpy.util.Ln;
+import com.github.kirer.adb.screenshot.ImageProcessor;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -281,23 +282,5 @@ public class StreamingProtocol {
         out.flush();
         
         Ln.d("Sent heartbeat");
-    }
-    
-    /**
-     * 将OptimizedImageProcessor的格式转换为协议格式
-     */
-    public static DataFormat convertFormat(com.github.kirer.adb.image.OptimizedImageProcessor.OutputFormat format) {
-        switch (format) {
-            case RAW_RGBA:
-                return DataFormat.RAW_RGBA;
-            case PNG:
-                return DataFormat.PNG;
-            case JPEG:
-                return DataFormat.JPEG;
-            case WEBP:
-                return DataFormat.WEBP;
-            default:
-                return DataFormat.PNG;
-        }
     }
 }

@@ -103,19 +103,15 @@ class KServerManager(private val context: Context) {
             if (result.success) {
                 Log.d(TAG, "KServer启动命令执行成功: ${result.output}")
                 isServiceRunning = true
-
                 // 等待服务启动
-                kotlinx.coroutines.delay(3000)
-
+                delay(1000)
                 // 验证服务是否真正启动
                 val isRunning = checkKServerProcess(shizukuManager)
                 if (isRunning) {
                     Log.d(TAG, "KServer服务确认启动成功")
                     isServiceRunning = true
-
                     // 启动健康检查
                     startHealthCheck()
-
                     true
                 } else {
                     Log.w(TAG, "KServer服务启动失败")
@@ -177,7 +173,7 @@ class KServerManager(private val context: Context) {
 
             # 启动KServer Socket模式，使用APK作为CLASSPATH
             # 使用nohup确保进程在后台持续运行
-            nohup sh -c "CLASSPATH='$apkPath' app_process /system/bin com.github.kirer.adb.Launcher -s -p $port" > /dev/null 2>&1 &
+            nohup sh -c "CLASSPATH='$apkPath' app_process /system/bin com.github.kirer.adb.Launcher -s -p $port --debug" > /dev/null 2>&1 &
 
             # 等待启动
             sleep 3
@@ -328,38 +324,21 @@ class KServerManager(private val context: Context) {
             false
         }
     }
-    
+
     /**
-     * 获取服务状态信息
+     * 通过Socket客户端执行截图测试（简化版：只支持RAW格式）
      */
-    fun getServiceStatus(): Map<String, Any> {
-        return mapOf(
-            "isRunning" to isServiceRunning,
-            "serviceType" to "Shell-based KServer",
-            "apkPath" to getApkPath()
-        )
-    }
-    
-    /**
-     * 通过Socket客户端执行截图测试
-     */
-    suspend fun testScreenshot(format: String = "png"): ByteArray? = withContext(Dispatchers.IO) {
+    suspend fun testScreenshot(): ByteArray? = withContext(Dispatchers.IO) {
         try {
             if (!isServiceRunning) {
                 Log.w(TAG, "服务未运行，无法截图")
                 return@withContext null
             }
+            Log.d(TAG, "执行截图测试")
 
-            Log.d(TAG, "执行截图测试，格式: $format")
-
-            // 通过Socket客户端连接KServer
+            // 通过Socket客户端连接KServer（简化版：只支持RAW格式）
             val client = KServerClient()
-            val response = when (format.lowercase()) {
-                "jpeg", "jpg" -> client.takeScreenshotOptimized("jpeg", 90)
-                "raw" -> client.takeScreenshotOptimized("raw", 100)
-                else -> client.takeScreenshotPng()
-            }
-
+            val response = client.takeScreenshot()
             if (response.success && response.data != null) {
                 Log.d(TAG, "截图成功，大小: ${response.data.size} bytes")
                 response.data
@@ -371,35 +350,6 @@ class KServerManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e(TAG, "截图测试失败", e)
             null
-        }
-    }
-    
-    /**
-     * 运行性能基准测试
-     */
-    suspend fun runBenchmark(): String = withContext(Dispatchers.IO) {
-        try {
-            if (!isServiceRunning) {
-                return@withContext "服务未运行"
-            }
-
-            Log.d(TAG, "开始性能基准测试...")
-
-            // 通过Socket客户端运行基准测试
-            val client = KServerClient()
-            val response = client.runBenchmark("full")
-
-            if (response.success) {
-                Log.d(TAG, "基准测试完成: ${response.message}")
-                response.message
-            } else {
-                Log.e(TAG, "基准测试失败: ${response.message}")
-                "基准测试失败: ${response.message}"
-            }
-
-        } catch (e: Exception) {
-            Log.e(TAG, "基准测试失败", e)
-            "基准测试失败: ${e.message}"
         }
     }
 }

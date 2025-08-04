@@ -1,9 +1,7 @@
 package com.github.kirer.adb.screenshot;
 
-import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.hardware.display.VirtualDisplay;
-import android.media.Image;
 import android.os.Build;
 import android.os.IBinder;
 import android.view.Surface;
@@ -15,8 +13,6 @@ import com.genymobile.scrcpy.util.Ln;
 import com.genymobile.scrcpy.wrappers.DisplayManager;
 import com.genymobile.scrcpy.wrappers.ServiceManager;
 import com.genymobile.scrcpy.wrappers.SurfaceControl;
-import com.github.kirer.adb.utils.BitmapConverter;
-import com.github.kirer.adb.image.OptimizedImageProcessor;
 
 /**
  * 屏幕捕获管理器，负责管理VirtualDisplay和ImageReader的集成
@@ -72,15 +68,6 @@ public class ScreenCaptureManager {
             cleanup();
             throw e;
         }
-    }
-
-    /**
-     * 检查是否正在捕获
-     *
-     * @return true如果正在捕获
-     */
-    public boolean isCapturing() {
-        return capturing;
     }
 
     /**
@@ -167,9 +154,8 @@ public class ScreenCaptureManager {
     /**
      * 开始屏幕捕获
      *
-     * @throws Exception 启动失败时抛出异常
      */
-    public void startCapture() throws Exception {
+    public void startCapture() {
         Ln.i("Starting screen capture...");
         if (!initialized) {
             throw new IllegalStateException("ScreenCaptureManager not initialized");
@@ -199,9 +185,7 @@ public class ScreenCaptureManager {
      */
     public void stopCapture() {
         Ln.i("Stopping screen capture...");
-
         capturing = false;
-
         // 释放VirtualDisplay
         if (virtualDisplay != null) {
             try {
@@ -211,128 +195,20 @@ public class ScreenCaptureManager {
             }
             virtualDisplay = null;
         }
-
         // 关闭ImageReaderHandler
         if (imageReaderHandler != null) {
             imageReaderHandler.close();
         }
-
         Ln.i("Screen capture stopped");
     }
 
-    /**
-     * 捕获屏幕截图
-     *
-     * @return 屏幕截图的Bitmap，失败时返回null
-     */
-    public Bitmap captureScreen() {
-        return captureScreen(3000); // 默认等待3秒
-    }
+    // 删除了getLatestImageResult方法，简化版不需要
 
     /**
-     * 捕获屏幕截图（带超时）
-     *
-     * @param timeoutMs 等待图像的超时时间（毫秒）
-     * @return 屏幕截图的Bitmap，失败时返回null
+     * 获取最新的图像数据（字节数组格式）- 兼容性方法
      */
-    public Bitmap captureScreen(long timeoutMs) {
-        try {
-            if (imageReaderHandler == null) {
-                Ln.e("ImageReaderHandler is null");
-                return null;
-            }
-
-            byte[] imageBytes = imageReaderHandler.getLatestImageBytes();
-            if (imageBytes == null) {
-                return null;
-            }
-
-            android.graphics.Bitmap bitmap = android.graphics.BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
-
-            if (bitmap != null && config.isAutoRotate() && displayInfo != null) {
-                int rotationAngle = BitmapConverter.getRotationAngle(displayInfo.getRotation());
-                if (rotationAngle != 0) {
-                    bitmap = BitmapConverter.rotateBitmap(bitmap, rotationAngle);
-                }
-            }
-
-            return bitmap;
-        } catch (Exception e) {
-            Ln.e("Failed to capture screen", e);
-            return null;
-        }
-    }
-
-    /**
-     * 直接获取PNG字节数组
-     */
-    public byte[] capturePngBytes() {
-        if (imageReaderHandler == null) {
-            Ln.e("ImageReaderHandler is null");
-            return null;
-        }
-        return imageReaderHandler.getLatestPngBytes();
-    }
-
-    /**
-     * 捕获图像字节数组（当前格式）
-     *
-     * @return 图像字节数组，失败时返回null
-     */
-    public byte[] captureImageBytes() {
-        if (imageReaderHandler == null) {
-            Ln.e("ImageReaderHandler is null");
-            return null;
-        }
+    public byte[] getLatestImageBytes(){
         return imageReaderHandler.getLatestImageBytes();
-    }
-
-    /**
-     * 设置输出格式
-     *
-     * @param format 输出格式
-     * @param quality 压缩质量（0-100，仅对JPEG和WebP有效）
-     */
-    public void setOutputFormat(OptimizedImageProcessor.OutputFormat format, int quality) {
-        if (imageReaderHandler == null) {
-            Ln.w("ImageReaderHandler is null, cannot set output format");
-            return;
-        }
-
-        OptimizedImageProcessor.CompressionConfig config;
-        switch (format) {
-            case RAW_RGBA:
-                config = OptimizedImageProcessor.CompressionConfig.rawRgba();
-                break;
-            case PNG:
-                config = OptimizedImageProcessor.CompressionConfig.png();
-                break;
-            case JPEG:
-                config = OptimizedImageProcessor.CompressionConfig.jpeg(quality);
-                break;
-            case WEBP:
-                config = OptimizedImageProcessor.CompressionConfig.webp(quality);
-                break;
-            default:
-                Ln.w("Unsupported output format: " + format);
-                return;
-        }
-
-        imageReaderHandler.setCompressionConfig(config);
-        Ln.i("Output format set to: " + format + (quality < 100 ? ", quality=" + quality : ""));
-    }
-
-    /**
-     * 获取处理结果（包含元数据）
-     *
-     * @return 处理结果，失败时返回null
-     */
-    public OptimizedImageProcessor.ProcessResult captureProcessResult() {
-        if (imageReaderHandler == null) {
-            Ln.e("ImageReaderHandler is null");
-            return null;
-        }
-        return imageReaderHandler.getLatestProcessResult();
     }
 
     /**
@@ -340,14 +216,11 @@ public class ScreenCaptureManager {
      */
     public void cleanup() {
         Ln.i("Cleaning up ScreenCaptureManager...");
-
         // 打印性能统计
         if (imageReaderHandler != null) {
-            imageReaderHandler.logStatistics();
             imageReaderHandler.close();
             imageReaderHandler = null;
         }
-
         stopCapture();
         initialized = false;
         displayInfo = null;

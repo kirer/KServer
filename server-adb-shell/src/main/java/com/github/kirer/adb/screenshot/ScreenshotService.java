@@ -1,13 +1,6 @@
 package com.github.kirer.adb.screenshot;
 
-import android.graphics.Bitmap;
-
 import com.genymobile.scrcpy.util.Ln;
-import com.github.kirer.adb.image.OptimizedImageProcessor;
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 
 /**
  * 屏幕截图服务主类
@@ -62,100 +55,13 @@ public class ScreenshotService {
         }
     }
 
-    /**
-     * 直接获取PNG字节数组
-     */
-    public byte[] takePngBytes() {
-        if (!running || !initialized) {
-            Ln.w("Service not running or not initialized");
-            return null;
-        }
-        if (captureManager == null) {
-            Ln.e("CaptureManager not available");
-            return null;
-        }
-
-        try {
-            long startTime = System.currentTimeMillis();
-
-            // 直接获取PNG字节数组
-            byte[] pngBytes = captureManager.capturePngBytes();
-
-            long duration = System.currentTimeMillis() - startTime;
-            if (pngBytes != null) {
-                Ln.i("PNG bytes captured in " + duration + "ms, size: " + pngBytes.length + " bytes");
-            } else {
-                Ln.w("PNG bytes capture failed after " + duration + "ms");
-            }
-            return pngBytes;
-        } catch (Exception e) {
-            Ln.e("Error taking PNG bytes", e);
-            return null;
-        }
-    }
+    // 删除了getLatestImageResult方法，简化版不需要
 
     /**
-     * 获取图像字节数组（当前格式）
+     * 获取处理结果（字节数组格式）- 兼容性方法
      */
-    public byte[] takeImageBytes() {
-        if (!running || !initialized) {
-            Ln.w("Service not running or not initialized");
-            return null;
-        }
-        if (captureManager == null) {
-            Ln.e("CaptureManager not available");
-            return null;
-        }
-
-        try {
-            long startTime = System.currentTimeMillis();
-
-            // 获取当前格式的图像字节数组
-            byte[] imageBytes = captureManager.captureImageBytes();
-
-            long duration = System.currentTimeMillis() - startTime;
-            if (imageBytes != null) {
-                Ln.i("Image bytes captured in " + duration + "ms, size: " + imageBytes.length + " bytes");
-            } else {
-                Ln.w("Image bytes capture failed after " + duration + "ms");
-            }
-            return imageBytes;
-        } catch (Exception e) {
-            Ln.e("Error taking image bytes", e);
-            return null;
-        }
-    }
-
-    /**
-     * 设置输出格式
-     */
-    public void setOutputFormat(OptimizedImageProcessor.OutputFormat format, int quality) {
-        if (!running || !initialized) {
-            Ln.w("Service not running or not initialized");
-            return;
-        }
-        if (captureManager == null) {
-            Ln.e("CaptureManager not available");
-            return;
-        }
-
-        captureManager.setOutputFormat(format, quality);
-    }
-
-    /**
-     * 获取处理结果（包含元数据）
-     */
-    public OptimizedImageProcessor.ProcessResult getProcessResult() {
-        if (!running || !initialized) {
-            Ln.w("Service not running or not initialized");
-            return null;
-        }
-        if (captureManager == null) {
-            Ln.e("CaptureManager not available");
-            return null;
-        }
-
-        return captureManager.captureProcessResult();
+    public byte[] getLatestImageBytes() {
+        return captureManager.getLatestImageBytes();
     }
 
     /**

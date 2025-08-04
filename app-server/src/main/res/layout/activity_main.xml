@@ -121,53 +121,16 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:orientation="horizontal">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnScreenshotPng"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:text="@string/screenshot_png"
-                        android:textSize="14sp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnScreenshotJpeg"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:layout_marginEnd="4dp"
-                        android:layout_weight="1"
-                        android:text="@string/screenshot_jpeg"
-                        android:textSize="14sp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnScreenshotRaw"
-                        style="@style/Widget.Material3.Button.OutlinedButton"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="4dp"
-                        android:layout_weight="1"
-                        android:text="@string/screenshot_raw"
-                        android:textSize="14sp" />
-
-                </LinearLayout>
-
+                <!-- 简化版：只保留RAW格式截图按钮 -->
                 <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnBenchmark"
+                    android:id="@+id/btnScreenshot"
                     style="@style/Widget.Material3.Button.OutlinedButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/run_benchmark"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/take_screenshot"
                     android:textSize="14sp" />
+
 
             </LinearLayout>
 
