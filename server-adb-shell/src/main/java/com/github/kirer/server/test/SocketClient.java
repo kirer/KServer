@@ -1,4 +1,4 @@
-package com.github.kirer.adb.test;
+package com.github.kirer.server.test;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;

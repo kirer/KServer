@@ -1,8 +1,8 @@
-package com.github.kirer.adb.net;
+package com.github.kirer.server.net;
 
 import com.genymobile.scrcpy.util.Ln;
-import com.github.kirer.adb.commands.CommandProcessor;
-import com.github.kirer.adb.commands.CommandResult;
+import com.github.kirer.server.commands.CommandProcessor;
+import com.github.kirer.server.commands.CommandResult;
 
 import java.io.BufferedReader;
 import java.io.IOException;

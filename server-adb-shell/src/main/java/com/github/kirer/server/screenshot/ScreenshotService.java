@@ -1,4 +1,4 @@
-package com.github.kirer.adb.screenshot;
+package com.github.kirer.server.screenshot;
 
 import android.graphics.Bitmap;
 import android.graphics.PixelFormat;
@@ -34,6 +34,8 @@ public class ScreenshotService {
     private VirtualDisplay virtualDisplay;
     private ImageReader imageReader;
     private byte[] bitmapBytes;
+
+    private static final Object lock = new Object();
 
     /**
      * 创建屏幕捕获管理器
@@ -103,32 +105,32 @@ public class ScreenshotService {
                 // 设置图像可用监听器（超级简化版：直接保存到共享内存）
                 imageReader.setOnImageAvailableListener(reader -> {
                     Ln.d("🔥 ImageReader回调被触发！");
-                    Image image = null;
-                    try {
-                        image = reader.acquireLatestImage();
-                        processImage(image);
-                    } catch (Exception e) {
-                        Ln.w("🔥 ImageReader回调异常！", e);
-                    } finally {
-                        if (image != null) {
-                            image.close();
-                        }
+                    byte[] bytes = processImage();
+                    if (bytes != null) {
+                        bitmapBytes = bytes;
                     }
                 }, backgroundHandler);
                 Ln.d("使用 DisplayManager API:" + virtualDisplay.getDisplay().getDisplayId());
             }
         } catch (Exception displayManagerException) {
             Ln.w("不可用 DisplayManager API");
-            try {
-                IBinder display = createDisplay();
-                Size deviceSize = displayInfo.getSize();
-                int layerStack = displayInfo.getLayerStack();
-                setDisplaySurface(display, imageReader.getSurface(), deviceSize.toRect(), inputSize.toRect(), layerStack);
-                Ln.d("使用 SurfaceControl API");
-            } catch (Exception surfaceControlException) {
-                Ln.e("不可用 SurfaceControl API", displayManagerException);
-                throw new AssertionError("Could not create display");
-            }
+            createDisplaySurface();
+        }
+    }
+
+    private void createDisplaySurface(){
+        try {
+            int width = displayInfo.getSize().getWidth();
+            int height = displayInfo.getSize().getHeight();
+            Size inputSize = new Size(width, height);
+            IBinder display = createDisplay();
+            Size deviceSize = displayInfo.getSize();
+            int layerStack = displayInfo.getLayerStack();
+            setDisplaySurface(display, imageReader.getSurface(), deviceSize.toRect(), inputSize.toRect(), layerStack);
+            Ln.d("使用 SurfaceControl API");
+        } catch (Exception surfaceControlException) {
+            Ln.e("不可用 SurfaceControl API");
+            throw new AssertionError("Could not create display");
         }
     }
 
@@ -203,11 +205,13 @@ public class ScreenshotService {
         Ln.i("Screen capture stopped");
     }
 
-    private void processImage(Image image) {
+    private byte[] processImage() {
+        Image image = null;
         try {
+            image = imageReader.acquireLatestImage();
             if (image == null) {
-                Ln.w("🔥 ImageReader回调触发但image为null！");
-                return;
+                Ln.w("🔥 ImageReader acquireLatestImage 为null！");
+                return null;
             }
             int imageWidth = image.getWidth();
             int imageHeight = image.getHeight();
@@ -215,7 +219,7 @@ public class ScreenshotService {
             Image.Plane plane = image.getPlanes()[0];
             ByteBuffer buffer = plane.getBuffer();
             if (buffer == null) {
-                return;
+                return null;
             }
             int pixelStride = plane.getPixelStride();
             int rowStride = plane.getRowStride();
@@ -232,11 +236,15 @@ public class ScreenshotService {
             ByteBuffer finalBuffer = ByteBuffer.allocate(bytes.length);
             finalBuffer.order(ByteOrder.LITTLE_ENDIAN);
             finalBuffer.put(bytes);
-            this.bitmapBytes = finalBuffer.array();
             bitmap.recycle();
-
+            return finalBuffer.array();
         } catch (Exception e) {
             Ln.w("🔥 ImageReader回调处理异常", e);
+            return null;
+        } finally {
+            if (image != null) {
+                image.close();
+            }
         }
     }
 
@@ -244,18 +252,21 @@ public class ScreenshotService {
      * 获取最新的图像数据
      */
     public byte[] getBitmapBytes() {
-        if (virtualDisplay == null) {
-            Image image;
-            long startTime = System.currentTimeMillis();
-            do {
-                if (System.currentTimeMillis() - startTime >= 5000) {
-                    return null;
-                }
-                image = imageReader.acquireLatestImage();
-            } while (image == null);
-            processImage(image);
+        synchronized (lock) {
+            if (virtualDisplay == null) {
+                createDisplaySurface();
+                byte[] bytes;
+                long startTime = System.currentTimeMillis();
+                do {
+                    if (System.currentTimeMillis() - startTime >= 5000) {
+                        return null;
+                    }
+                    bytes = processImage();
+                } while (bytes == null);
+                this.bitmapBytes = bytes;
+            }
+            return this.bitmapBytes;
         }
-        return this.bitmapBytes;
     }
 
     /**

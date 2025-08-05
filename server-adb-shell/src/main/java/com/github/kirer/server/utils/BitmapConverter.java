@@ -1,4 +1,4 @@
-package com.github.kirer.adb.utils;
+package com.github.kirer.server.utils;
 
 import android.graphics.Bitmap;
 import android.graphics.ImageFormat;

@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -20,6 +21,7 @@ import rikka.shizuku.Shizuku
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +79,9 @@ class MainActivity : AppCompatActivity() {
         setupObservers()
         // 添加Shizuku权限监听器
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
+
+        val libPath = applicationInfo.nativeLibraryDir
+        Log.d("KKK", "Native lib path: " + libPath)
     }
 
     override fun onDestroy() {
@@ -279,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 addLog("启动KServer...")
-                val success = kServerManager.startServer(shizukuManager)
+                val success = kServerManager.startServer(shizukuManager, applicationInfo.nativeLibraryDir)
                 if (success) {
                     addLog("KServer启动成功")
                     viewModel.updateKServerStatus(true)

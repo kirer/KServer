@@ -1,7 +1,7 @@
-package com.github.kirer.adb.commands;
+package com.github.kirer.server.commands;
 
 import com.genymobile.scrcpy.util.Ln;
-import com.github.kirer.adb.screenshot.ScreenshotService;
+import com.github.kirer.server.screenshot.ScreenshotService;
 
 import java.io.FileOutputStream;
 

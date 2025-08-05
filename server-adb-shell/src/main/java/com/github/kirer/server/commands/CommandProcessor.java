@@ -1,4 +1,4 @@
-package com.github.kirer.adb.commands;
+package com.github.kirer.server.commands;
 
 import com.genymobile.scrcpy.util.Ln;
 

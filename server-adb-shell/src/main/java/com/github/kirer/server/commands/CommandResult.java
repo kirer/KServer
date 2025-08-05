@@ -1,4 +1,4 @@
-package com.github.kirer.adb.commands;
+package com.github.kirer.server.commands;
 
 /**
  * 命令执行结果包装类
