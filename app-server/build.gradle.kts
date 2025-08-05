@@ -1,3 +1,5 @@
+import kotlin.collections.plusAssign
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,7 +18,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+
+        ndk {
+            //noinspection ChromeOsAbiSupport
+            abiFilters += listOf("arm64-v8a")  // 只构建 64-bit 架构
+        }
     }
+
 
     buildFeatures {
         viewBinding = true
@@ -32,11 +41,17 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
     }
     kotlinOptions {
-        jvmTarget = "11"
+        jvmTarget = "1.8"
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 }
 
@@ -57,7 +72,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.livedata.ktx)
 
     // KServer模块依赖
-    implementation(project(":server-adb-shell"))
+    implementation(project(":server-k"))
 
     // Network
     implementation(libs.okhttp)

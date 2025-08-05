@@ -107,7 +107,7 @@ server-k/
 
 ### 命令行启动
 ```bash
-app_process /system/bin com.github.kirer.server.Main <socket_address> <fd> <mmap_size>
+app_process /system/bin com.github.kirer.server.Launcher <socket_address> <fd> <mmap_size>
 ```
 
 参数说明:

@@ -21,8 +21,6 @@ dependencyResolutionManagement {
 
 rootProject.name = "KServer"
 include(":app")
-include(":server-adb-shell")
 include(":server-scrcpy")
-include(":app-server")
 include(":server-k")
-include(":app-k")
+include(":app-server")

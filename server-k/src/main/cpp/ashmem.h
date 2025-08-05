@@ -1,51 +1,48 @@
-#ifndef ASHMEM_H
-#define ASHMEM_H
+#ifndef LIBASHMEM_H
+#define LIBASHMEM_H
 
+#include <stdint.h>
+#include <sys/types.h>
 #include <jni.h>
-#include <sys/mman.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/ioctl.h>
 
-// Ashmem ioctl 命令定义
-#define ASHMEM_NAME_LEN         256
-#define ASHMEM_NAME_DEF         "dev/ashmem"
+// IOCTL commands for ashmem
+#define ASHMEM_SET_NAME         0x41007701
+#define ASHMEM_SET_SIZE         0x40087703
 
-#define ASHMEM_SET_NAME         _IOW('a', 1, char[ASHMEM_NAME_LEN])
-#define ASHMEM_GET_NAME         _IOR('a', 2, char[ASHMEM_NAME_LEN])
-#define ASHMEM_SET_SIZE         _IOW('a', 3, size_t)
-#define ASHMEM_GET_SIZE         _IO('a', 4)
-#define ASHMEM_SET_PROT_MASK    _IOW('a', 5, unsigned long)
-#define ASHMEM_GET_PROT_MASK    _IO('a', 6)
-#define ASHMEM_PIN              _IOW('a', 7, struct ashmem_pin)
-#define ASHMEM_UNPIN            _IOW('a', 8, struct ashmem_pin)
-#define ASHMEM_GET_PIN_STATUS   _IO('a', 9)
-#define ASHMEM_PURGE_ALL_CACHES _IO('a', 10)
+// Syscall number for memfd_create on ARM64
+#define SYS_MEMFD_CREATE        279
 
-struct ashmem_pin {
-    unsigned int offset;
-    unsigned int len;
-};
+// Constants
+#define ASHMEM_DEVICE           "/dev/ashmem"
+#define SHARED_MEMORY_NAME      "shared_memory"
+#define AUTOGO_SHARED_MEMORY    "autogo_shared_memory"
+#define SHMEM_LOG_TAG           "SHMEM"
+#define SHMEM_FILE_PATH         "/data/local/tmp/server-k"
 
-// JNI 函数声明
-#ifdef __cplusplus
-extern "C" {
-#endif
+// Global variables
+extern int g_shmem_fd;          // dword_55F8
+extern void* g_shmem_base;      // qword_5600
+extern uint64_t* g_timestamp;   // qword_5608
+extern uint64_t* g_data_size;   // qword_5610
+extern void* g_data_ptr;        // qword_5618
+extern uint64_t g_last_read_ts; // qword_5628
 
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_memory_Ashmem_init(JNIEnv *env, jobject thiz, jint fd, jlong size);
+// Core functions
+int try_create_ashmem(size_t size);
+int try_create_memfd(size_t size);
+int shmem_create(size_t size);
+int shmem_connect(size_t size);
+int shmem_read(void* buffer, size_t max_size);
+int shmem_write(const void* data, size_t size);
+int shmem_cleanup(void);
+char* shell(const char* command);
 
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_memory_Ashmem_writeData(JNIEnv *env, jobject thiz, jbyteArray data);
+// TCP Socket functions已移除，使用直接文件访问
 
-JNIEXPORT jbyteArray JNICALL
-Java_com_github_kirer_server_memory_Ashmem_readData(JNIEnv *env, jobject thiz);
+// JNI functions
+JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_create(JNIEnv* env, jclass clazz, jint size);
+JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_connect(JNIEnv* env, jclass clazz, jint size);
+JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_write(JNIEnv* env, jclass clazz, jbyteArray data);
+JNIEXPORT jbyteArray JNICALL Java_com_github_kirer_server_Ashmem_read(JNIEnv* env, jclass clazz);
 
-JNIEXPORT void JNICALL
-Java_com_github_kirer_server_memory_Ashmem_destroy(JNIEnv *env, jobject thiz);
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif // ASHMEM_H
+#endif // LIBASHMEM_H

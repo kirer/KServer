@@ -2,6 +2,9 @@
 <project version="4">
   <component name="CompilerConfiguration">
     <bytecodeTargetLevel>
+      <module name="KServer.app-k" target="21" />
+      <module name="KServer.server-adb-shell" target="21" />
+      <module name="KServer.server-adb-shell.main" target="1.8" />
       <module name="KServer.server-adb-shell.test" target="1.8" />
     </bytecodeTargetLevel>
   </component>

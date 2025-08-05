@@ -15,6 +15,7 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.lifecycleScope
 import com.github.kirer.app_server.databinding.ActivityMainBinding
+import com.github.kirer.server.Ashmem
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import rikka.shizuku.Shizuku
@@ -30,7 +31,6 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var shizukuManager: ShizukuManager
     private lateinit var kServerManager: KServerManager
-    private val kServerClient = KServerClient()
 
     // 计数器相关
     private var titleCounter = 0
@@ -53,6 +53,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        System.loadLibrary("ashmem")
         // 启动标题计数器
         startTitleCounter()
         // 初始化管理器
@@ -77,7 +78,6 @@ class MainActivity : AppCompatActivity() {
         }
         setupUI()
         setupObservers()
-        // 添加Shizuku权限监听器
         Shizuku.addRequestPermissionResultListener(shizukuPermissionListener)
 
         val libPath = applicationInfo.nativeLibraryDir
@@ -215,17 +215,14 @@ class MainActivity : AppCompatActivity() {
         } else {
             "KServer: 未启动" to ContextCompat.getColor(this, android.R.color.holo_red_dark)
         }
-
         binding.tvKServerStatus.text = text
         binding.tvKServerStatus.setTextColor(color)
-
         // 更新按钮文本
         binding.btnStartKServer.text = if (isRunning) {
             getString(R.string.stop_kserver)
         } else {
             getString(R.string.start_kserver)
         }
-
         // 更新截图按钮状态
         updateScreenshotButtonsState()
     }
@@ -325,33 +322,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkKServerStatus() {
-        lifecycleScope.launch {
-            try {
-                val isRunning = kServerManager.isKServerRunning()
-                viewModel.updateKServerStatus(isRunning)
-
-                if (isRunning) {
-                    addLog("KServer正在运行")
-                    checkConnection()
-                } else {
-                    addLog("KServer未运行")
-                }
-            } catch (e: Exception) {
-                addLog("检查KServer状态时出错: ${e.message}")
-            }
-        }
-    }
-
     private fun checkConnection() {
         lifecycleScope.launch {
-            val status = kServerClient.checkConnection()
+            // 使用KServerManager的全局连接
+            addLog("连接到KServer共享内存文件...")
+            val connected = kServerManager.connectToServer()
+
+            val status = if (connected) {
+                KServerClient.ConnectionStatus.CONNECTED
+            } else {
+                KServerClient.ConnectionStatus.ERROR
+            }
+
             viewModel.updateConnectionStatus(status)
 
-            if (status == KServerClient.ConnectionStatus.CONNECTED) {
-                addLog("成功连接到KServer")
+            if (connected) {
+                addLog("连接成功")
             } else {
-                addLog("无法连接到KServer")
+                addLog("连接失败")
             }
         }
     }
@@ -373,10 +361,62 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("UseKtx", "SetTextI18n")
     private fun displayScreenshot(data: ByteArray) {
-        val bitmap = BitmapFactory.decodeByteArray(data, 0, data.size)
-        binding.ivScreenshot.setImageBitmap(bitmap)
-        val sizeText = formatFileSize(data.size)
-        binding.tvImageInfo.text = "大小: $sizeText, 分辨率: ${bitmap.width}x${bitmap.height}"
+        try {
+            // 解析共享内存数据格式：前8字节是头部（宽度和高度），后面是RGBA像素数据
+            if (data.size < 8) {
+                addLog("数据格式错误：数据太小")
+                return
+            }
+
+            // 读取头部信息（小端格式）
+            val width = ((data[3].toInt() and 0xFF) shl 24) or
+                    ((data[2].toInt() and 0xFF) shl 16) or
+                    ((data[1].toInt() and 0xFF) shl 8) or
+                    (data[0].toInt() and 0xFF)
+
+            val height = ((data[7].toInt() and 0xFF) shl 24) or
+                    ((data[6].toInt() and 0xFF) shl 16) or
+                    ((data[5].toInt() and 0xFF) shl 8) or
+                    (data[4].toInt() and 0xFF)
+
+            addLog("解析图像尺寸: ${width}x${height}")
+
+            // 检查数据大小是否合理
+            val expectedPixelDataSize = width * height * 4 // RGBA_8888
+            val actualPixelDataSize = data.size - 8
+
+            if (actualPixelDataSize < expectedPixelDataSize) {
+                addLog("像素数据不完整: 期望${expectedPixelDataSize}字节，实际${actualPixelDataSize}字节")
+            }
+
+            // 创建Bitmap并设置像素数据
+            val bitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888)
+
+            // 将RGBA数据转换为ARGB格式并设置到bitmap
+            val pixelData = data.copyOfRange(8, data.size)
+            val pixels = IntArray(width * height)
+
+            for (i in pixels.indices) {
+                val baseIndex = i * 4
+                if (baseIndex + 3 < pixelData.size) {
+                    val r = pixelData[baseIndex].toInt() and 0xFF
+                    val g = pixelData[baseIndex + 1].toInt() and 0xFF
+                    val b = pixelData[baseIndex + 2].toInt() and 0xFF
+                    val a = pixelData[baseIndex + 3].toInt() and 0xFF
+                    pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
+                }
+            }
+
+            bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+
+            binding.ivScreenshot.setImageBitmap(bitmap)
+            val sizeText = formatFileSize(data.size)
+            binding.tvImageInfo.text = "大小: $sizeText, 分辨率: ${width}x${height}"
+
+        } catch (e: Exception) {
+            addLog("显示截图失败: ${e.message}")
+            Log.e("MainActivity", "显示截图失败", e)
+        }
     }
 
     private fun addLog(message: String) {

@@ -16,9 +16,30 @@ class KServerManager(private val context: Context) {
 
     companion object {
         private const val TAG = "KServerManager"
-        private const val DEFAULT_PORT = 8888
     }
+
     private var isServiceRunning = false
+    private val kServerClient = KServerClient() // 全局KServerClient实例
+
+    /**
+     * 连接到KServer共享内存
+     */
+    suspend fun connectToServer(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "连接到KServer共享内存...")
+            val status = kServerClient.checkConnection(context)
+            val connected = status == KServerClient.ConnectionStatus.CONNECTED
+            if (connected) {
+                Log.d(TAG, "KServer连接成功")
+            } else {
+                Log.w(TAG, "KServer连接失败")
+            }
+            connected
+        } catch (e: Exception) {
+            Log.e(TAG, "连接KServer时出错", e)
+            false
+        }
+    }
 
     /**
      * 检查KServer是否运行
@@ -28,34 +49,22 @@ class KServerManager(private val context: Context) {
     }
 
     /**
-     * 通过Shizuku shell启动server-adb-shell
+     * 通过Shizuku shell启动server-k
      * 直接运行APK中的代码，无需额外DEX文件
      */
-    suspend fun startServer(shizukuManager: ShizukuManager, libPath: String, port: Int = DEFAULT_PORT): Boolean =
+    suspend fun startServer(shizukuManager: ShizukuManager, libPath: String): Boolean =
         withContext(Dispatchers.IO) {
             try {
                 Log.d(TAG, "启动KServer...")
                 Log.d(TAG, "libPath参数: $libPath")
-
-                // 1. 部署.so文件到可访问的位置
-                Log.d(TAG, "部署native库...")
-                 val deploySuccess = deployNativeLibrary(shizukuManager, libPath)
-                 if (!deploySuccess) {
-                     Log.w(TAG, "部署native库失败，继续启动但可能无法使用共享内存功能")
-                 } else {
-                     Log.d(TAG, "native库部署成功")
-                 }
-
                 // 2. 获取当前应用的APK路径
                 val apkPath = context.packageCodePath
                 Log.d(TAG, "APK路径: $apkPath")
-
                 // 3. 停止现有进程
                 var result = shizukuManager.execute("pkill -f '${Launcher::class.java.name}' || true")
                 Log.d(TAG, "停止结果: ${result.output}")
-
-                // 4. 启动KServer
-                val command = "CLASSPATH='$apkPath' app_process /system/bin ${Launcher::class.java.name} --port $port --libPath '/data/local/tmp' --debug > /data/local/tmp/kserver.log 2>&1 &"
+                // 4. 启动KServer，使用直接文件访问
+                val command = "CLASSPATH='$apkPath' app_process /system/bin ${Launcher::class.java.name} --libPath=${libPath} --debug > /data/local/tmp/server-k.log 2>&1 &"
                 Log.d(TAG, "执行命令: $command")
                 result = shizukuManager.execute(command)
                 if (result.success) {
@@ -79,7 +88,7 @@ class KServerManager(private val context: Context) {
         try {
             Log.d(TAG, "通过Shizuku停止KServer...")
             // 停止KServer进程
-            val killCommand = "pkill -f 'com.github.kirer.adb.Launcher' || true"
+            val killCommand = "pkill -f '${Launcher::class.java.name}' || true"
             val result = shizukuManager.execute(killCommand)
             if (result.success) {
                 Log.d(TAG, "KServer停止命令执行成功")
@@ -98,59 +107,60 @@ class KServerManager(private val context: Context) {
     /**
      * 部署native库到可访问的位置
      */
-    private suspend fun deployNativeLibrary(shizukuManager: ShizukuManager, libPath: String): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                Log.d(TAG, "开始部署native库...")
-                Log.d(TAG, "源路径: $libPath")
+    private suspend fun deployNativeLibrary(
+        shizukuManager: ShizukuManager, libPath: String
+    ): Boolean = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "开始部署native库...")
+            Log.d(TAG, "源路径: $libPath")
 
-                // 检查源文件是否存在
-                val sourceFile = "$libPath/libashmem.so"
-                val checkSourceResult = shizukuManager.execute("ls -la '$sourceFile'")
-                if (checkSourceResult.output.contains("No such file")) {
-                    Log.w(TAG, "源文件不存在: $sourceFile")
-                    return@withContext false
-                }
+            // 检查源文件是否存在
+            val sourceFile = "$libPath/libashmem.so"
+            val checkSourceResult = shizukuManager.execute("ls -la '$sourceFile'")
+            if (checkSourceResult.output.contains("No such file")) {
+                Log.w(TAG, "源文件不存在: $sourceFile")
+                return@withContext false
+            }
 
-                // 复制.so文件到/data/local/tmp/
-                val targetPath = "/data/local/tmp/libashmem.so"
-                val copyCommand = """
+            // 复制.so文件到/data/local/tmp/
+            val targetPath = "/data/local/tmp/libashmem.so"
+            val copyCommand = """
                     cp '$sourceFile' '$targetPath' &&
                     chmod 755 '$targetPath' &&
                     ls -la '$targetPath'
                 """.trimIndent()
 
-                Log.d(TAG, "执行复制命令: $copyCommand")
-                val copyResult = shizukuManager.execute(copyCommand)
-                Log.d(TAG, "复制结果: ${copyResult.output}")
+            Log.d(TAG, "执行复制命令: $copyCommand")
+            val copyResult = shizukuManager.execute(copyCommand)
+            Log.d(TAG, "复制结果: ${copyResult.output}")
 
-                if (copyResult.success && !copyResult.output.contains("No such file")) {
-                    Log.d(TAG, "native库部署成功")
-                    true
-                } else {
-                    Log.e(TAG, "native库部署失败: ${copyResult.error}")
-                    false
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "部署native库时出错", e)
+            if (copyResult.success && !copyResult.output.contains("No such file")) {
+                Log.d(TAG, "native库部署成功")
+                true
+            } else {
+                Log.e(TAG, "native库部署失败: ${copyResult.error}")
                 false
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "部署native库时出错", e)
+            false
         }
+    }
 
     /**
      * 构建启动命令
      */
-    private fun buildStartCommand(apkPath: String, port: Int): String {
+    private fun buildStartCommand(apkPath: String): String {
         return """
             # 停止现有进程
-            pkill -f 'com.github.kirer.adb.Launcher' || true
-            # 启动KServer Socket模式，使用APK作为CLASSPATH
-            CLASSPATH='$apkPath' app_process /system/bin com.github.kirer.adb.Launcher --port $port --debug > /data/local/tmp/kserver.log 2>&1 &
+            pkill -f '${Launcher::class.java.name}' || true
+            # 启动KServer，使用APK作为CLASSPATH
+            CLASSPATH='$apkPath' app_process /system/bin ${Launcher::class.java.name} --libPath '/data/local/tmp' > /data/local/tmp/kserver.log 2>&1 &
         """.trimIndent()
     }
 
     /**
-     * 通过Socket客户端执行截图测试（简化版：只支持RAW格式）
+     * 通过共享内存执行截图测试
      */
     suspend fun testScreenshot(): ByteArray? = withContext(Dispatchers.IO) {
         try {
@@ -160,9 +170,8 @@ class KServerManager(private val context: Context) {
             }
             Log.d(TAG, "执行截图测试")
 
-            // 通过Socket客户端连接KServer（简化版：只支持RAW格式）
-            val client = KServerClient()
-            val response = client.takeScreenshot()
+            // 使用全局KServerClient实例读取截图数据
+            val response = kServerClient.takeScreenshot()
             if (response.success && response.data != null) {
                 Log.d(TAG, "截图成功，大小: ${response.data.size} bytes")
                 response.data
