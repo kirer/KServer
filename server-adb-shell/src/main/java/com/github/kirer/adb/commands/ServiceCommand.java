@@ -1,4 +1,4 @@
-package com.github.kirer.adb.net;
+package com.github.kirer.adb.commands;
 
 /**
  * 服务命令接口

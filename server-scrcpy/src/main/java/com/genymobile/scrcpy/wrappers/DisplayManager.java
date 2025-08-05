@@ -84,7 +84,6 @@ public final class DisplayManager {
     }
 
     public VirtualDisplay createVirtualDisplay(String name, int width, int height, int displayIdToMirror, Surface surface) throws Exception {
-        Ln.d("createVirtualDisplay>name:" + name + ">width:" + width + ">height:" + height + ">displayIdToMirror:" + displayIdToMirror + ">surface:" + surface);
         Method method = getCreateVirtualDisplayMethod();
         return (VirtualDisplay) method.invoke(null, name, width, height, displayIdToMirror, surface);
     }

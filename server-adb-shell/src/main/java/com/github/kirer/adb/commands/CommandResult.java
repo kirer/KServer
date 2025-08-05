@@ -1,4 +1,4 @@
-package com.github.kirer.adb.net;
+package com.github.kirer.adb.commands;
 
 /**
  * 命令执行结果包装类
@@ -11,7 +11,6 @@ public class CommandResult {
         BYTES,     // 字节数组
         BOOLEAN,   // 布尔值
         ERROR,     // 错误信息
-        STREAMING  // 流式传输
     }
     
     private final Type type;
@@ -54,13 +53,7 @@ public class CommandResult {
         return new CommandResult(Type.ERROR, null, message, false);
     }
 
-    /**
-     * 创建流式传输结果
-     */
-    public static CommandResult streaming(Object streamingData, String message) {
-        return new CommandResult(Type.STREAMING, streamingData, message, true);
-    }
-    
+
     // Getters
     public Type getType() {
         return type;
@@ -72,10 +65,6 @@ public class CommandResult {
     
     public String getMessage() {
         return message;
-    }
-    
-    public boolean isSuccess() {
-        return success;
     }
     
     /**
