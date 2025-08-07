@@ -1,0 +1,36 @@
+ninja: Entering directory `E:\Android\KServer\server-k\.cxx\Debug\6n2f4x5s\arm64-v8a'
+[1/2] Building C object CMakeFiles/ashmem.dir/ashmem.c.o
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:300:73: warning: unused parameter 'env' [-Wunused-parameter]
+  300 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_init(JNIEnv* env, jclass clazz, jint size) {
+      |                                                                         ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:300:85: warning: unused parameter 'clazz' [-Wunused-parameter]
+  300 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_init(JNIEnv* env, jclass clazz, jint size) {
+      |                                                                                     ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:333:113: warning: format specifies type 'unsigned long long' but the argument has type 'uint64_t' (aka 'unsigned long') [-Wformat]
+  333 |         __android_log_print(ANDROID_LOG_INFO, SHMEM_LOG_TAG, "JNI写入: 数据写入成功，时间戳: %llu", *g_timestamp);
+      |                                                                                              ~~~~   ^~~~~~~~~~~~
+      |                                                                                              %lu
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:307:86: warning: unused parameter 'clazz' [-Wunused-parameter]
+  307 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_write(JNIEnv* env, jclass clazz, jbyteArray data) {
+      |                                                                                      ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:361:125: warning: format specifies type 'unsigned long long' but the argument has type 'uint64_t' (aka 'unsigned long') [-Wformat]
+  361 |     __android_log_print(ANDROID_LOG_INFO, SHMEM_LOG_TAG, "JNI读取: 读取数据 %zu 字节，时间戳: %llu", data_size, current_ts);
+      |                                                                                               ~~~~              ^~~~~~~~~~
+      |                                                                                               %lu
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:342:91: warning: unused parameter 'clazz' [-Wunused-parameter]
+  342 | JNIEXPORT jbyteArray JNICALL Java_com_github_kirer_server_Ashmem_read(JNIEnv* env, jclass clazz) {
+      |                                                                                           ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:389:75: warning: unused parameter 'env' [-Wunused-parameter]
+  389 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_create(JNIEnv* env, jclass clazz, jint size) {
+      |                                                                           ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:389:87: warning: unused parameter 'clazz' [-Wunused-parameter]
+  389 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_create(JNIEnv* env, jclass clazz, jint size) {
+      |                                                                                       ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:397:76: warning: unused parameter 'env' [-Wunused-parameter]
+  397 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_connect(JNIEnv* env, jclass clazz, jint size) {
+      |                                                                            ^
+E:/Android/KServer/server-k/src/main/cpp/ashmem.c:397:88: warning: unused parameter 'clazz' [-Wunused-parameter]
+  397 | JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_connect(JNIEnv* env, jclass clazz, jint size) {
+      |                                                                                        ^
+10 warnings generated.
+[2/2] Linking C shared library E:\Android\KServer\server-k\build\libs\libashmem.so
