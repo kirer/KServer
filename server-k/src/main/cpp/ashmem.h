@@ -32,7 +32,7 @@ int try_create_ashmem(size_t size);
 int try_create_memfd(size_t size);
 int shmem_create(size_t size);
 int shmem_connect(size_t size);
-int shmem_read(void* buffer, size_t max_size);
+int shmem_read(void* buffer, size_t* data_size);
 int shmem_write(const void* data, size_t size);
 int shmem_cleanup(void);
 char* shell(const char* command);
@@ -44,5 +44,6 @@ JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_create(JNIEnv* env, j
 JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_connect(JNIEnv* env, jclass clazz, jint size);
 JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_write(JNIEnv* env, jclass clazz, jbyteArray data);
 JNIEXPORT jbyteArray JNICALL Java_com_github_kirer_server_Ashmem_read(JNIEnv* env, jclass clazz);
+JNIEXPORT jint JNICALL Java_com_github_kirer_server_Ashmem_cleanup(JNIEnv* env, jclass clazz);
 
 #endif // LIBASHMEM_H

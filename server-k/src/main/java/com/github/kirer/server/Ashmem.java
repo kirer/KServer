@@ -32,4 +32,11 @@ public class Ashmem {
      * @return Byte array containing the data, or null if no data/error
      */
     public static native byte[] read();
+
+    /**
+     * Cleanup shared memory resources
+     *
+     * @return 0 on success, -1 on failure
+     */
+    public static native int cleanup();
 }

@@ -96,6 +96,15 @@ public class Launcher {
         if (screenCaptureService != null) {
             screenCaptureService.stop();
         }
+
+        // 清理共享内存资源
+        try {
+            Ashmem.cleanup();
+            Ln.d("[清理] 共享内存资源清理完成");
+        } catch (Exception e) {
+            Ln.w("[清理] 清理共享内存时出错", e);
+        }
+
         Ln.i("[清理] 资源清理完成");
     }
 
@@ -525,7 +534,14 @@ public class Launcher {
                 backgroundHandler = null;
             }
 
-            // TCP服务器已移除，使用直接文件访问
+            // 清理共享内存资源
+            try {
+                Ln.d("[清理] 正在清理共享内存资源");
+                Ashmem.cleanup();
+                Ln.d("[清理] 共享内存资源清理完成");
+            } catch (Exception e) {
+                Ln.w("[清理] 清理共享内存资源时出错", e);
+            }
 
             isRunning.set(false);
             Ln.i("[服务] 屏幕捕获服务已停止");
