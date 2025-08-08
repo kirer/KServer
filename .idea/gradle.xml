@@ -11,7 +11,7 @@
           <set>
             <option value="$PROJECT_DIR$" />
             <option value="$PROJECT_DIR$/app" />
-            <option value="$PROJECT_DIR$/app-server" />
+            <option value="$PROJECT_DIR$/app-k" />
             <option value="$PROJECT_DIR$/server-k" />
             <option value="$PROJECT_DIR$/server-scrcpy" />
           </set>

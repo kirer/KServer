@@ -1,6 +1,5 @@
 package com.github.kirer.server;
 
-import android.annotation.SuppressLint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.display.VirtualDisplay;
@@ -26,11 +25,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 屏幕截图服务类
- * 负责管理屏幕捕获的整个生命周期
+ * 负责管理屏幕捕获的整个生命周期，支持多种通信方式
  */
-public  class ScreenCaptureService {
+public class ScreenCaptureService {
 
-    private static final String DEFAULT_LIB_NAME = "/libashmem.so";
+    private static final String TAG = "ScreenCaptureService";
 
     // 配置常量
     private static final int BUFFER_PADDING_BYTES = 40; // 缓冲区额外填充字节
@@ -39,7 +38,8 @@ public  class ScreenCaptureService {
     private static final long CAPTURE_INTERVAL_MS = 20L; // 截图间隔毫秒
     private static final int MAX_IMAGE_BUFFERS = 3; // ImageReader最大缓冲区数量
 
-
+    // 通信相关
+    private final Config config;
     // 同步锁 - 保护图像处理过程
     private final Object imageLock = new Object();
 
@@ -57,7 +57,7 @@ public  class ScreenCaptureService {
     private Handler backgroundHandler;
 
     // 缓冲区池 - 避免频繁内存分配
-    private byte[] reusableByteArray;
+    private byte[] reusableByteArray = new byte[1];
 
     // 控制标志
     private final AtomicBoolean isRunning = new AtomicBoolean(false);
@@ -69,63 +69,24 @@ public  class ScreenCaptureService {
     /**
      * 构造函数 - 初始化屏幕截图服务
      *
-     * @param libPath native库路径
+     * @param config 通信配置
      * @throws Exception 初始化失败时抛出异常
      */
-    @SuppressLint("UnsafeDynamicallyLoadedCode")
-    public ScreenCaptureService(String libPath) throws Exception {
-        Ln.d("[初始化] 正在初始化屏幕捕获服务...");
-        // 加载native库
-        try {
-            String fullLibPath = libPath + DEFAULT_LIB_NAME;
-            Ln.d("[库加载] 尝试加载本地库: " + fullLibPath);
-            System.load(fullLibPath);
-            Ln.i("[库加载] 本地库加载成功: " + fullLibPath);
-        } catch (UnsatisfiedLinkError e) {
-            throw new Exception("[库加载] 本地库加载失败: " + e.getMessage(), e);
-        }
-
-        // 初始化显示管理器
-        Ln.d("[显示] 初始化显示管理器");
+    public ScreenCaptureService(Config config) throws Exception {
+        this.config = config;
+        Ln.d("[" + TAG + "] 初始化显示管理器");
         displayManager = ServiceManager.getDisplayManager();
         if (displayManager == null) {
-            throw new Exception("[显示] 显示管理器初始化失败");
+            throw new Exception("[" + TAG + "] 显示管理器初始化失败");
         }
-        Ln.d("[显示] 显示管理器初始化成功");
-
-        // 获取显示器信息
-        Ln.d("[显示] 获取显示器信息，显示器ID: " + DISPLAY_ID);
+        Ln.d("[" + TAG + "] 获取显示器信息，显示器ID: " + DISPLAY_ID);
         displayInfo = displayManager.getDisplayInfo(DISPLAY_ID);
         if (displayInfo == null) {
-            throw new Exception("[显示] 无法获取显示器 " + DISPLAY_ID + " 的信息");
+            throw new Exception("[" + TAG + "] 无法获取显示器 " + DISPLAY_ID + " 的信息");
         }
-
         screenSize = displayInfo.getSize();
-        Ln.i("[显示] 屏幕尺寸: " + screenSize.getWidth() + "x" + screenSize.getHeight());
-
-        // 创建共享内存文件
-        int memorySize = calculateMemorySize(screenSize);
-        Ln.i("[内存] 创建共享内存文件，大小: " + memorySize + " 字节");
-        int result = Ashmem.create(memorySize);
-        if (result == -1) {
-            throw new Exception("[内存] 共享内存文件创建失败，大小: " + memorySize);
-        }
-        Ln.i("[内存] 共享内存文件创建成功");
-
-        Ln.d("[初始化] 屏幕捕获服务初始化完成");
-    }
-
-    /**
-     * 计算所需的共享内存大小
-     *
-     * @param size 屏幕尺寸
-     * @return 内存大小（字节）
-     */
-    private int calculateMemorySize(Size size) {
-        // 计算：(宽度 + 填充) * (高度 + 填充) * 每像素字节数
-        int width = size.getWidth() + BUFFER_PADDING_BYTES;
-        int height = size.getHeight() + BUFFER_PADDING_BYTES;
-        return width * height * BYTES_PER_PIXEL;
+        Ln.i("[" + TAG + "] 屏幕尺寸: " + screenSize.getWidth() + "x" + screenSize.getHeight());
+        Ln.d("[" + TAG + "] 屏幕捕获服务初始化完成");
     }
 
     /**
@@ -134,82 +95,86 @@ public  class ScreenCaptureService {
      */
     public void start() throws Exception {
         if (isRunning.get()) {
-            Ln.w("[服务] 屏幕捕获服务已在运行中");
+            Ln.w("[" + TAG + "] 屏幕捕获服务已在运行中");
             return;
         }
-
-        Ln.i("[服务] 正在启动屏幕捕获服务...");
+        Ln.i("[" + TAG + "] 正在启动屏幕捕获服务...");
         shouldStop.set(false);
-
+        // 启动通信通道
+        if (Server.start() == -1) {
+            throw new Exception("[" + TAG + "] 通信通道启动失败");
+        }
+        Ln.i("[" + TAG + "] 通信通道启动成功");
         // 初始化缓冲区
-        initializeBuffers();
-
+//        initializeBuffers();
         try {
             // 优先尝试使用VirtualDisplay API（更稳定）
-            Ln.d("[API] 尝试使用 VirtualDisplay API");
+            Ln.d("[" + TAG + "] 尝试使用 VirtualDisplay API");
             startWithVirtualDisplay();
-            Ln.i("[API] VirtualDisplay API 启动成功");
+            Ln.i("[" + TAG + "] VirtualDisplay API 启动成功");
         } catch (Exception e) {
-            Ln.d("[API] VirtualDisplay API 失败，切换到 SurfaceControl API");
+            Ln.d("[" + TAG + "] VirtualDisplay API 失败，切换到 SurfaceControl API");
             try {
                 startWithSurfaceControl();
-                Ln.i("[API] SurfaceControl API 启动成功");
+                Ln.i("[" + TAG + "] SurfaceControl API 启动成功");
             } catch (Exception fallbackException) {
-                Ln.e("[API] VirtualDisplay 和 SurfaceControl API 都失败了", fallbackException);
+                Ln.e("[" + TAG + "] VirtualDisplay 和 SurfaceControl API 都失败了", fallbackException);
                 stop();
-                throw new Exception("[服务] 屏幕捕获服务启动失败", fallbackException);
+                throw new Exception("[" + TAG + "] 屏幕捕获服务启动失败", fallbackException);
             }
         }
 
         isRunning.set(true);
-        Ln.i("[服务] 屏幕捕获服务启动完成");
+        Ln.i("[" + TAG + "] 屏幕捕获服务启动完成");
     }
 
     /**
      * 初始化可重用的缓冲区以避免频繁内存分配
      */
     private void initializeBuffers() {
-        int maxBufferSize = calculateMemorySize(screenSize) + HEADER_SIZE_BYTES;
+        int maxBufferSize = config.getMemorySize() + HEADER_SIZE_BYTES;
         reusableByteArray = new byte[maxBufferSize];
-        Ln.d("[缓冲区] 初始化可重用缓冲区，大小: " + maxBufferSize + " 字节");
+        Ln.d("[" + TAG + "] 初始化可重用缓冲区，大小: " + maxBufferSize + " 字节");
     }
 
     /**
      * 使用VirtualDisplay API启动截图服务
      */
     private void startWithVirtualDisplay() throws Exception {
-        Ln.d("[VirtualDisplay] 尝试使用 VirtualDisplay API 启动");
+        Ln.d("[" + TAG + "] 尝试使用 VirtualDisplay API 启动");
 
         // 创建ImageReader
-        Ln.d("[VirtualDisplay] 创建 ImageReader");
         imageReader = createImageReader(screenSize.getWidth(), screenSize.getHeight(), PixelFormat.RGBA_8888, MAX_IMAGE_BUFFERS);
         if (imageReader == null) {
-            throw new Exception("[VirtualDisplay] ImageReader 创建失败");
+            throw new Exception("[" + TAG + "] ImageReader 创建失败");
         }
 
         // 创建后台线程处理图像回调
-        Ln.d("[VirtualDisplay] 创建后台处理线程");
+        Ln.d("[" + TAG + "] 创建后台处理线程");
         backgroundThread = new HandlerThread("ScreenCaptureHandler");
         backgroundThread.start();
         backgroundHandler = new Handler(backgroundThread.getLooper());
 
         // 设置图像可用监听器
-        Ln.d("[VirtualDisplay] 设置图像回调监听器");
-        imageReader.setOnImageAvailableListener(reader -> {
-            if (!shouldStop.get()) {
-                processImage();
+        Ln.d("[" + TAG + "] 设置图像回调监听器");
+        imageReader.setOnImageAvailableListener(new ImageReader.OnImageAvailableListener() {
+            @Override
+            public void onImageAvailable(ImageReader reader) {
+                if (!shouldStop.get()) {
+                    processImage();
+                }
             }
         }, backgroundHandler);
 
         // 创建VirtualDisplay
-        Ln.d("[VirtualDisplay] 创建虚拟显示器");
+        Ln.d("[" + TAG + "] 创建虚拟显示器");
         virtualDisplay = displayManager.createVirtualDisplay("k-server-capture", screenSize.getWidth(), screenSize.getHeight(), DISPLAY_ID, imageReader.getSurface());
 
         if (virtualDisplay == null) {
-            throw new Exception("[VirtualDisplay] 虚拟显示器创建失败");
+            throw new Exception("[" + TAG + "] 虚拟显示器创建失败");
         }
 
-        Ln.d("[VirtualDisplay] 虚拟显示器创建成功");
+        Ln.d("[" + TAG + "] 虚拟显示器创建成功");
     }
 
     /**
@@ -217,15 +182,20 @@ public  class ScreenCaptureService {
      * 这种方式会持续循环捕获屏幕
      */
     private void startWithSurfaceControl() {
-        Ln.d("[SurfaceControl] 使用 SurfaceControl API 启动（降级模式）");
+        Ln.d("[" + TAG + "] 使用 SurfaceControl API 启动（降级模式）");
         // 创建后台线程用于持续截图
-        Ln.d("[SurfaceControl] 创建后台捕获线程");
+        Ln.d("[" + TAG + "] 创建后台捕获线程");
         backgroundThread = new HandlerThread("SurfaceControlCaptureThread");
         backgroundThread.start();
         backgroundHandler = new Handler(backgroundThread.getLooper());
         // 在后台线程中启动持续截图循环
-        Ln.d("[SurfaceControl] 启动持续捕获循环");
-        backgroundHandler.post(this::runSurfaceControlCaptureLoop);
+        Ln.d("[" + TAG + "] 启动持续捕获循环");
+        backgroundHandler.post(new Runnable() {
+            @Override
+            public void run() {
+                runSurfaceControlCaptureLoop();
+            }
+        });
     }
 
     /**
@@ -256,28 +226,15 @@ public  class ScreenCaptureService {
                 setDisplaySurface(virtualDisplayToken, imageReader.getSurface(), screenRect, screenRect, displayInfo.getLayerStack());
                 Ln.d("[SurfaceControl] 虚拟显示重新设置完成");
                 // 处理图像
-                if (processImage()) {
-                    // 成功处理一帧后短暂休眠
-                    Thread.sleep(CAPTURE_INTERVAL_MS);
-                } else {
-                    // 处理失败，短暂等待后重试
-                    Thread.sleep(50);
-                }
-
+                processImage();
+                Thread.sleep(CAPTURE_INTERVAL_MS);
             } catch (InterruptedException e) {
                 Ln.d("[SurfaceControl] SurfaceControl 捕获循环被中断");
                 break;
             } catch (Exception e) {
                 Ln.w("[SurfaceControl] SurfaceControl 捕获循环出错", e);
-                // 出错后稍微等待，避免快速重试
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException ie) {
-                    break;
-                }
             }
         }
-
         // 最终清理所有资源
         cleanupSurfaceControlResources();
         Ln.d("[SurfaceControl] SurfaceControl 捕获循环结束");
@@ -397,20 +354,20 @@ public  class ScreenCaptureService {
      */
     public void stop() {
         if (!isRunning.get()) {
-            Ln.d("[服务] 屏幕捕获服务未在运行");
+            Ln.d("[" + TAG + "] 屏幕捕获服务未在运行");
             return;
         }
 
-        Ln.i("[服务] 正在停止屏幕捕获服务...");
+        Ln.i("[" + TAG + "] 正在停止屏幕捕获服务...");
         shouldStop.set(true);
 
         // 清理VirtualDisplay资源
         if (virtualDisplay != null) {
             try {
                 virtualDisplay.release();
-                Ln.d("[清理] VirtualDisplay 已释放");
+                Ln.d("[" + TAG + "] VirtualDisplay 已释放");
             } catch (Exception e) {
-                Ln.w("[清理] 释放 VirtualDisplay 时出错", e);
+                Ln.w("[" + TAG + "] 释放 VirtualDisplay 时出错", e);
             }
             virtualDisplay = null;
         }
@@ -421,34 +378,32 @@ public  class ScreenCaptureService {
         // 停止后台线程
         if (backgroundThread != null) {
             try {
-                Ln.d("[线程] 正在停止后台线程");
+                Ln.d("[" + TAG + "] 正在停止后台线程");
                 backgroundThread.quitSafely();
                 backgroundThread.join(1000); // 等待最多1秒
-                Ln.d("[线程] 后台线程已停止");
+                Ln.d("[" + TAG + "] 后台线程已停止");
             } catch (InterruptedException e) {
-                Ln.w("[线程] 等待后台线程停止时被中断");
+                Ln.w("[" + TAG + "] 等待后台线程停止时被中断");
             }
             backgroundThread = null;
             backgroundHandler = null;
         }
-
-        // 清理共享内存资源
+        // 停止通信通道
         try {
-            Ln.d("[清理] 正在清理共享内存资源");
-            Ashmem.cleanup();
-            Ln.d("[清理] 共享内存资源清理完成");
+            Ln.d("[" + TAG + "] 正在停止通信通道");
+            Server.stop();
+            Ln.d("[" + TAG + "] 通信通道已停止");
         } catch (Exception e) {
-            Ln.w("[清理] 清理共享内存资源时出错", e);
+            Ln.w("[" + TAG + "] 停止通信通道时出错", e);
         }
-
         isRunning.set(false);
-        Ln.i("[服务] 屏幕捕获服务已停止");
+        Ln.i("[" + TAG + "] 屏幕捕获服务已停止");
     }
 
     /**
      * 处理ImageReader
      */
-    private boolean processImage() {
+    private void processImage() {
         long startTime = System.currentTimeMillis();
         synchronized (imageLock) {
             Image image = null;
@@ -456,17 +411,15 @@ public  class ScreenCaptureService {
                 // 获取最新图像
                 image = imageReader.acquireLatestImage();
                 if (image == null) {
-                    return false;
+                    return;
                 }
                 // 处理图像数据
                 processImageData(image);
                 lastFrameTime = System.currentTimeMillis();
                 long processingTime = lastFrameTime - startTime;
                 Ln.d("[帧处理] 耗时 " + processingTime + "ms");
-                return true;
             } catch (Exception e) {
                 Ln.w("[帧处理] 回调中处理图像时出错", e);
-                return false;
             } finally {
                 if (image != null) {
                     try {
@@ -499,29 +452,41 @@ public  class ScreenCaptureService {
             int rowStride = plane.getRowStride(); // 每行实际字节数
             int rowPadding = rowStride - pixelStride * imageWidth; // 行填充字节数
 
-            // 计算实际缓冲区尺寸
-            int bufferWidth = imageWidth + rowPadding / pixelStride;
-            int bufferHeight = imageHeight;
-            int dataSize = buffer.remaining();
-            // 检查缓冲区大小
-            int requiredSize = dataSize + HEADER_SIZE_BYTES;
-            if (reusableByteArray.length < requiredSize) {
-                Ln.w("[缓冲区] 可重用缓冲区太小，重新分配: " + requiredSize + " 字节");
-                reusableByteArray = new byte[requiredSize];
+            // 计算清理后的数据大小
+            int cleanDataSize = imageWidth * imageHeight * 4;
+            int totalSize = cleanDataSize + HEADER_SIZE_BYTES;
+            if (reusableByteArray.length < totalSize) {
+                reusableByteArray = new byte[totalSize];
             }
-            // 写入头部信息（宽度和高度，小端格式）
+            // 写入正确的头部信息（实际图像尺寸）
             ByteBuffer headerBuffer = ByteBuffer.wrap(reusableByteArray, 0, HEADER_SIZE_BYTES);
             headerBuffer.order(ByteOrder.LITTLE_ENDIAN);
-            headerBuffer.putInt(bufferWidth);
-            headerBuffer.putInt(bufferHeight);
-            // 写入像素数据
-            buffer.get(reusableByteArray, HEADER_SIZE_BYTES, dataSize);
-            // 写入共享内存
-            int result = Ashmem.write(reusableByteArray);
-            if (result != 0) {
-                Ln.e("[内存写入] 写入共享内存失败，错误代码: " + result);
+            headerBuffer.putInt(imageWidth);  // 实际宽度
+            headerBuffer.putInt(imageHeight); // 实际高度
+            // 去除行填充，只复制实际像素数据
+            if (rowPadding == 0) {
+                // 没有行填充，直接复制
+                buffer.get(reusableByteArray, HEADER_SIZE_BYTES, cleanDataSize);
             } else {
-                Ln.d("[内存写入] 成功写入到共享内存 (" + imageWidth + "x" + imageHeight + ")，数据大小: " + dataSize + " 字节");
+                // 有行填充，逐行复制
+                byte[] rowBuffer = new byte[rowStride];
+                int destOffset = HEADER_SIZE_BYTES;
+                for (int y = 0; y < imageHeight; y++) {
+                    buffer.get(rowBuffer, 0, rowStride);
+                    System.arraycopy(rowBuffer, 0, reusableByteArray, destOffset, imageWidth * 4);
+                    destOffset += imageWidth * 4;
+                }
+            }
+            // 通过通信通道写入数据
+            try {
+                int success = Server.writeData(reusableByteArray);
+                if (success == 0) {
+                    Ln.d("[" + TAG + "] 成功写入到通信通道 (" + imageWidth + "x" + imageHeight + ")，数据大小: " + totalSize + " 字节");
+                } else {
+                    Ln.e("[" + TAG + "] 写入通信通道失败");
+                }
+            } catch (Exception e) {
+                Ln.e("[" + TAG + "] 写入通信通道时出错", e);
             }
         } catch (Exception e) {
             Ln.e("[数据处理] 处理图像数据时出错", e);
@@ -535,5 +500,14 @@ public  class ScreenCaptureService {
      */
     public boolean isRunning() {
         return isRunning.get();
+    }
+
+    public static int getScreenshotMemorySize() {
+        DisplayManager displayManager = ServiceManager.getDisplayManager();
+        DisplayInfo displayInfo = displayManager.getDisplayInfo(0);
+        Size size = displayInfo.getSize();
+        int width = size.getWidth() + BUFFER_PADDING_BYTES;
+        int height = size.getHeight() + BUFFER_PADDING_BYTES;
+        return width * height * BYTES_PER_PIXEL;
     }
 }

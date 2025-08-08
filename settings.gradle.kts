@@ -23,4 +23,4 @@ rootProject.name = "KServer"
 include(":app")
 include(":server-scrcpy")
 include(":server-k")
-include(":app-server")
+include(":app-k")
