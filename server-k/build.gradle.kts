@@ -1,5 +1,7 @@
 @file:Suppress("UnstableApiUsage")
 
+import java.util.Locale
+
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
@@ -66,122 +68,73 @@ dependencies {
     implementation(project(":server-scrcpy"))
 }
 
+val isWindows = System.getProperty("os.name").lowercase().contains("windows")
+val androidHome: String? = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+val ndkFromEnv: String? = System.getenv("ANDROID_NDK") ?: System.getenv("ANDROID_NDK_ROOT")
+
 /**
  * 查找Android NDK路径
  */
 fun findAndroidNdk(): String {
-    // 1. 检查环境变量
-    val ndkFromEnv = System.getenv("ANDROID_NDK") ?: System.getenv("ANDROID_NDK_ROOT")
     if (ndkFromEnv != null && File(ndkFromEnv).exists()) {
         return ndkFromEnv
     }
-    // 2. 从Android SDK路径查找
-    val androidHome = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
     if (androidHome != null) {
         val ndkDir = File(androidHome, "ndk")
         if (ndkDir.exists()) {
-            // 查找最新版本的NDK
             val ndkVersions = ndkDir.listFiles()?.filter {
                 it.isDirectory && it.name.matches(Regex("\\d+\\..*"))
             }?.sortedByDescending { it.name }
-
             if (ndkVersions?.isNotEmpty() == true) {
+                println("✅ 找到NDK: ${ndkVersions.first().absolutePath}")
                 return ndkVersions.first().absolutePath
             }
         }
     }
-    throw GradleException("未找到Android NDK。请设置环境变量 ANDROID_NDK 或 ANDROID_NDK_ROOT")
-}
-
-/**
- * 查找dx工具路径
- */
-fun findDxTool(androidHome: String): String {
-    // 新版本的dx工具路径
-    val newDxPath = File(androidHome, "build-tools").listFiles()
-        ?.filter { it.isDirectory && it.name.matches(Regex("\\d+\\..*")) }
-        ?.maxByOrNull { it.name }
-        ?.let { File(it, "dx") }
-    if (newDxPath?.exists() == true) {
-        return newDxPath.absolutePath
-    }
-    // 旧版本的dx工具路径
-    val oldDxPath = File(androidHome, "platform-tools/dx")
-    if (oldDxPath.exists()) {
-        return oldDxPath.absolutePath
-    }
-    // 在build-tools中查找任何版本的dx
-    val buildToolsDir = File(androidHome, "build-tools")
-    if (buildToolsDir.exists()) {
-        buildToolsDir.listFiles()?.forEach { versionDir ->
-            if (versionDir.isDirectory) {
-                val dxFile = File(versionDir, "dx")
-                if (dxFile.exists()) {
-                    return dxFile.absolutePath
-                }
-            }
-        }
-    }
-
-    throw GradleException("未找到dx工具，请检查Android SDK安装")
+    throw GradleException("❌ 未找到Android NDK。请设置环境变量 ANDROID_NDK 或 ANDROID_NDK_ROOT")
 }
 
 /**
  * 查找CMake工具路径
  */
 fun findCMakePath(): String {
-    val osName = System.getProperty("os.name").lowercase()
-    val isWindows = osName.contains("windows")
-
-    // 根据操作系统确定可能的CMake路径
     val possiblePaths = when {
-        isWindows -> listOfNotNull(
-            "cmake.exe",                                    // PATH中的cmake
-            "C:\\Program Files\\CMake\\bin\\cmake.exe",     // 默认安装路径
-            "C:\\Program Files (x86)\\CMake\\bin\\cmake.exe", // 32位安装路径
-            "C:\\Tools\\cmake\\bin\\cmake.exe",             // Chocolatey安装路径
-            System.getenv("ProgramFiles")?.let { "$it\\CMake\\bin\\cmake.exe" }, // 动态Program Files路径
-            System.getenv("ProgramFiles(x86)")?.let { "$it\\CMake\\bin\\cmake.exe" } // 动态Program Files (x86)路径
-        )
-        else -> listOf(
-            "cmake",                        // PATH中的cmake
-            "/opt/homebrew/bin/cmake",      // Homebrew on Apple Silicon
-            "/usr/local/bin/cmake",         // Homebrew on Intel Mac / Linux
-            "/usr/bin/cmake",               // System installation
-            "/snap/bin/cmake"               // Snap package on Linux
-        )
+        isWindows -> File("${androidHome}\\cmake").listFiles()
+            .map { "${it.absolutePath}\\bin\\cmake.exe" }
+
+        else -> File("${androidHome}/cmake").listFiles()
+            .map { "${it.absolutePath}/bin/cmake" }
     }
-
-    println("正在查找CMake，操作系统: $osName")
-    println("候选路径: ${possiblePaths.joinToString(", ")}")
-
     for (path in possiblePaths) {
         try {
-            println("尝试路径: $path")
             val process = ProcessBuilder(path, "--version")
                 .redirectErrorStream(true)
                 .start()
             val result = process.waitFor()
             if (result == 0) {
                 val output = process.inputStream.bufferedReader().readText()
-                println("✅ 找到CMake: $path")
-                println("版本信息: ${output.lines().firstOrNull() ?: "未知版本"}")
+                println("✅ 找到CMake: $path ${output.lines().firstOrNull() ?: "未知版本"}")
                 return path
-            } else {
-                println("❌ 路径无效: $path (退出码: $result)")
             }
-        } catch (e: Exception) {
-            println("❌ 路径测试失败: $path (${e.message})")
+        } catch (ignored: Exception) {
         }
     }
+    throw GradleException("❌ 未找到CMake工具，Android SDK MANAGER 中未安装")
+}
 
-    val installInstructions = when {
-        isWindows -> "请安装CMake: https://cmake.org/download/ 或使用 choco install cmake"
-        osName.contains("mac") -> "请安装CMake: brew install cmake"
-        else -> "请安装CMake: sudo apt-get install cmake 或 sudo yum install cmake"
+/**
+ * 查找d8工具路径
+ */
+fun findD8Tool(): String {
+    val path = File(androidHome, "build-tools").listFiles()
+        ?.filter { it.isDirectory && it.name.matches(Regex("\\d+\\..*")) }
+        ?.maxByOrNull { it.name }
+        ?.let { File(it, (if (isWindows) "d8.bat" else "d8")) }
+    if (path?.exists() == true) {
+        println("✅ 找到d8: ${path.absolutePath}")
+        return path.absolutePath
     }
-
-    throw GradleException("未找到CMake工具，$installInstructions")
+    throw GradleException("❌ 未找到d8工具，请检查Android SDK安装")
 }
 
 /**
@@ -341,9 +294,33 @@ set_target_properties(server-k PROPERTIES
 """.trimIndent()
 }
 
-// ================================
-// 服务器程序构建任务
-// ================================
+/**
+ * 将DEX和SO文件转换为C头文件
+ */
+fun generateFileHeader(inputFile: File, outputFile: File, varName: String) {
+    if (!inputFile.exists()) {
+        throw GradleException("❌ 文件不存在: ${inputFile.absolutePath}")
+    }
+    val bytes = inputFile.readBytes()
+    outputFile.writeText(
+        """
+#ifndef ${varName.uppercase(Locale.getDefault())}_H
+#define ${varName.uppercase(Locale.getDefault())}_H
+unsigned char ${varName}_data[] = {
+${
+            bytes.withIndex().chunked(12) { chunk ->
+                "  " + chunk.joinToString(", ") { (_, byte) ->
+                    "0x%02x".format(byte.toInt() and 0xFF)
+                }
+            }.joinToString(",\n")
+        }
+};
+unsigned int ${varName}_len = ${bytes.size};
+#endif // ${varName.uppercase(Locale.getDefault())}_H
+""".trimIndent()
+    )
+    println("✅ 生成 ${outputFile.name}: ${bytes.size} 字节")
+}
 
 /**
  * 构建服务器程序，产出server-k-server.dex和libserver-k.so
@@ -360,15 +337,13 @@ tasks.register("buildServer") {
         val binDir = File(projectRoot, "build/bin-server")
         val outputDir = File(projectRoot, "server-k/build/k-server-output")
         val libDir = File(outputDir, "lib/arm64-v8a")
-        println("=== 构建服务器程序 ===")
+        println("=== Server 构建服务器程序 ===")
         println("源码目录: ${sourceDir.absolutePath}")
         println("构建目录: ${buildDir.absolutePath}")
         println("输出目录: ${outputDir.absolutePath}")
-        // 检查源码目录
         if (!sourceDir.exists()) {
-            throw GradleException("源码目录不存在: ${sourceDir.absolutePath}")
+            throw GradleException("❌ 源码目录不存在: ${sourceDir.absolutePath}")
         }
-        // 清理并创建构建目录
         if (buildDir.exists()) {
             buildDir.deleteRecursively()
         }
@@ -376,133 +351,99 @@ tasks.register("buildServer") {
         binDir.mkdirs()
         outputDir.mkdirs()
         libDir.mkdirs()
-        // 检查Android NDK
-        val androidNdk = findAndroidNdk()
-        println("使用NDK: $androidNdk")
-        // 创建服务器专用的CMakeLists.txt
         val serverCMakeFile = File(buildDir, "CMakeLists.txt")
         serverCMakeFile.writeText(generateServerCMakeContent(sourceDir, binDir))
-        // 查找CMake路径
-        val cmakePath = findCMakePath()
-        println("使用CMake: $cmakePath")
         // 配置CMake
-        val cmakeConfigCmd = listOf(
-            cmakePath,
-            buildDir.absolutePath,
-            "-DCMAKE_TOOLCHAIN_FILE=$androidNdk/build/cmake/android.toolchain.cmake",
-            "-DANDROID_ABI=arm64-v8a",
-            "-DANDROID_PLATFORM=android-24",
-            "-DCMAKE_BUILD_TYPE=Release"
-        )
-        println("配置CMake...")
-        val configResult = project.exec {
-            workingDir = buildDir
-            commandLine = cmakeConfigCmd
-            isIgnoreExitValue = true
+        if (providers.exec {
+                workingDir(buildDir)
+                commandLine(
+                    listOf(
+                        findCMakePath(),
+                        buildDir.absolutePath,
+                        "-DCMAKE_TOOLCHAIN_FILE=${findAndroidNdk()}/build/cmake/android.toolchain.cmake",
+                        "-DANDROID_ABI=arm64-v8a",
+                        "-DANDROID_PLATFORM=android-24",
+                        "-DCMAKE_BUILD_TYPE=Release"
+                    )
+                )
+                isIgnoreExitValue = true
+            }.result.get().exitValue != 0) {
+            throw GradleException("❌ CMake编译失败")
         }
-        if (configResult.exitValue != 0) {
-            throw GradleException("CMake配置失败")
-        }
+        println("✅ CMake编译成功")
         // 编译
-        println("开始编译...")
-        val buildResult = project.exec {
-            workingDir = buildDir
-            commandLine = listOf("make", "-j${Runtime.getRuntime().availableProcessors()}")
-            isIgnoreExitValue = true
+        if (providers.exec {
+                workingDir(buildDir)
+                commandLine(listOf("make", "-j${Runtime.getRuntime().availableProcessors()}"))
+                isIgnoreExitValue = true
+            }.result.get().exitValue != 0) {
+            throw GradleException("❌ Make编译失败")
         }
-        if (buildResult.exitValue != 0) {
-            throw GradleException("编译失败")
-        }
-        // 1. 复制SO库文件
+        println("✅ Make编译成功")
+        // 复制SO库文件
         val serverBinary = File(binDir, "libserver-k.so")
-        if (serverBinary.exists()) {
-            val targetFile = File(libDir, "libserver-k.so")
-            serverBinary.copyTo(targetFile, overwrite = true)
-            println("✅ 复制SO库: ${serverBinary.name} -> ${targetFile.absolutePath}")
-            println("   文件大小: ${targetFile.length()} 字节")
-        } else {
-            throw GradleException("未找到生成的SO文件: ${serverBinary.absolutePath}")
+        if (!serverBinary.exists()) {
+            throw GradleException("❌ 未找到生成的SO文件: ${serverBinary.absolutePath}")
         }
-        // 2. 创建服务器专用的DEX文件
+        val targetFile = File(libDir, "libserver-k.so")
+        serverBinary.copyTo(targetFile, overwrite = true)
+        println("✅ 复制SO库: ${serverBinary.absolutePath} -> ${targetFile.absolutePath}    文件大小: ${targetFile.length()} 字节")
+        val jars = mutableListOf<String>()
+        configurations.getByName("debugRuntimeClasspath").files.forEach { file ->
+            if (file.name.endsWith(".jar") && !file.name.contains("kotlin-stdlib") && !file.name.contains(
+                    "gson"
+                ) && !file.name.contains("annotations")
+            ) {
+                jars.add(file.absolutePath)
+                println("✅ 添加依赖: ${file.absolutePath}")
+            }
+        }
+        // 创建服务器专用的DEX文件
         val classesDir = File(
             projectRoot,
             "server-k/build/intermediates/javac/debug/compileDebugJavaWithJavac/classes"
         )
-        val dexFile = File(outputDir, "k-server.dex")
-        if (classesDir.exists()) {
-            // 使用dx工具创建DEX文件
-            val androidHome = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
-            if (androidHome == null) {
-                throw GradleException("未找到Android SDK，请设置ANDROID_HOME或ANDROID_SDK_ROOT环境变量")
-            }
-
-            // 查找dx工具
-            val dxTool = findDxTool(androidHome)
-            println("使用DX工具: $dxTool")
-
-            // 收集所有需要的类文件和依赖
-            val classpath = mutableListOf<String>()
-
-            // 添加项目类文件
-            classpath.add(classesDir.absolutePath)
-
-            // 添加依赖的JAR文件（过滤掉有问题的文件）
-            configurations.getByName("debugRuntimeClasspath").files.forEach { file ->
-                if (file.name.endsWith(".jar") &&
-                    !file.name.contains("kotlin-stdlib") &&
-                    !file.name.contains("gson") &&
-                    !file.name.contains("annotations")
-                ) {
-                    classpath.add(file.absolutePath)
-                    println("添加依赖: ${file.name}")
-                } else {
-                    println("跳过JAR: ${file.name}")
-                }
-            }
-
-            // 执行dx命令
-            val dxCmd = listOf(
-                dxTool,
-                "--dex",
-                "--min-sdk-version=24",
-                "--output=${dexFile.absolutePath}"
-            ) + classpath
-
-            println("创建DEX文件...")
-            val dxResult = project.exec {
-                commandLine = dxCmd
-                isIgnoreExitValue = true
-            }
-
-            if (dxResult.exitValue != 0) {
-                throw GradleException("创建DEX文件失败")
-            }
-
-            if (dexFile.exists()) {
-                println("✅ 创建DEX文件: ${dexFile.absolutePath}")
-                println("   文件大小: ${dexFile.length()} 字节")
-            } else {
-                throw GradleException("DEX文件创建失败")
-            }
-        } else {
-            throw GradleException("Java类文件目录不存在: ${classesDir.absolutePath}")
+        if (!classesDir.exists()) {
+            throw GradleException("❌ Java类文件目录不存在: ${classesDir.absolutePath}")
         }
-
-        // 4. 显示使用说明
-        println("\n=== 🎉 服务器构建完成 ===")
+        // 先将class文件打包成JAR，因为D8不能直接处理目录
+        val tempJarFile = File(buildDir, "server-k-classes.jar")
+        if (providers.exec {
+                workingDir(classesDir)
+                commandLine(listOf("jar", "cf", tempJarFile.absolutePath, "."))
+                isIgnoreExitValue = true
+            }.result.get().exitValue != 0) {
+            throw GradleException("❌ 创建临时JAR文件失败")
+        }
+        println("✅ 创建临时JAR文件: ${tempJarFile.absolutePath}")
+        if (providers.exec {
+                commandLine(listOf(findD8Tool(), "--min-api", "24", "--output", outputDir.absolutePath, tempJarFile.absolutePath) + jars)
+                isIgnoreExitValue = true
+            }.result.get().exitValue != 0) {
+            throw GradleException("❌ D8工具编译失败")
+        }
+        val generatedDexFile = File(outputDir, "classes.dex")
+        if (!generatedDexFile.exists()) {
+            throw GradleException("❌ D8生成的DEX文件不存在: ${generatedDexFile.absolutePath}")
+        }
+        val dexFile = File(outputDir, "k-server.dex")
+        generatedDexFile.renameTo(dexFile)
+        if (!dexFile.exists()) {
+            throw GradleException("❌ DEX文件重命名失败")
+        }
+        println("✅ 创建DEX文件: ${dexFile.absolutePath}   文件大小: ${dexFile.length()} 字节")
+        // 显示使用说明
+        println("=== 🎉 Server 构建完成 ===")
         println("📁 输出目录: ${outputDir.absolutePath}")
         println("📦 输出文件:")
         println("  - k-server.dex: ${dexFile.length()} 字节")
         println("  - libserver-k.so: ${File(libDir, "libserver-k.so").length()} 字节")
-        println()
         println("🚀 部署到设备:")
-        println("  adb push ${outputDir.absolutePath}/* /data/local/tmp/")
-        println()
+        println("adb push ${outputDir.absolutePath}/* /data/local/tmp/")
         println("▶️  启动服务器:")
-        println("  adb shell 'chmod +x /data/local/tmp/k-server.dex && chmod +x /data/local/tmp/lib/arm64-v8a/libserver-k.so && CLASSPATH=/data/local/tmp/k-server.dex app_process /system/bin com.github.kirer.server.Launcher --mode=SHARED_MEMORY --libPath=/data/local/tmp/lib/arm64-v8a --debug > /data/local/tmp/k-server.log 2>&1 &'")
-        println("  adb shell 'chmod +x /data/local/tmp/k-server.dex && chmod +x /data/local/tmp/lib/arm64-v8a/libserver-k.so && CLASSPATH=/data/local/tmp/k-server.dex app_process /system/bin com.github.kirer.server.Launcher --mode=UNIX_SOCKET --libPath=/data/local/tmp/lib/arm64-v8a --socketName=k.socket --debug > /data/local/tmp/k-server.log 2>&1 &'")
-        println("  adb shell 'chmod +x /data/local/tmp/k-server.dex && chmod +x /data/local/tmp/lib/arm64-v8a/libserver-k.so && CLASSPATH=/data/local/tmp/k-server.dex app_process /system/bin com.github.kirer.server.Launcher --mode=TCP_SOCKET --libPath=/data/local/tmp/lib/arm64-v8a --tcpHost=127.0.0.1 --tcpPort=7777 --debug > /data/local/tmp/k-server.log 2>&1 &'")
-        println()
+        println("adb shell 'chmod +x /data/local/tmp/k-server.dex && chmod +x /data/local/tmp/lib/arm64-v8a/libserver-k.so && CLASSPATH=/data/local/tmp/k-server.dex app_process /system/bin com.github.kirer.server.Launcher --mode=SHARED_MEMORY --libPath=/data/local/tmp/lib/arm64-v8a --debug > /data/local/tmp/k-server.log 2>&1 &'")
+        println("adb shell 'chmod +x /data/local/tmp/k-server.dex && chmod +x /data/local/tmp/lib/arm64-v8a/libserver-k.so && CLASSPATH=/data/local/tmp/k-server.dex app_process /system/bin com.github.kirer.server.Launcher --mode=UNIX_SOCKET --libPath=/data/local/tmp/lib/arm64-v8a --socketName=k.socket --debug > /data/local/tmp/k-server.log 2>&1 &'")
+        println("adb shell 'chmod +x /data/local/tmp/k-server.dex && chmod +x /data/local/tmp/lib/arm64-v8a/libserver-k.so && CLASSPATH=/data/local/tmp/k-server.dex app_process /system/bin com.github.kirer.server.Launcher --mode=TCP_SOCKET --libPath=/data/local/tmp/lib/arm64-v8a --tcpHost=127.0.0.1 --tcpPort=7777 --debug > /data/local/tmp/k-server.log 2>&1 &'")
     }
 }
 
@@ -519,16 +460,10 @@ tasks.register("generateEmbeddedFiles") {
         val dexFile = File(outputDir, "k-server.dex")
         val soFile = File(outputDir, "lib/arm64-v8a/libserver-k.so")
         val headerDir = File(projectRoot, "server-k/src/main/cpp/client/embedded")
-
         headerDir.mkdirs()
-
-        // 生成 k-server.dex 头文件
         generateFileHeader(dexFile, File(headerDir, "k_server_dex.h"), "k_server_dex")
-
-        // 生成 libserver-k.so 头文件
         generateFileHeader(soFile, File(headerDir, "libserver_k_so.h"), "libserver_k_so")
-
-        println("\n=== 🎉 嵌入文件生成完成 ===")
+        println("=== 🎉 嵌入文件生成完成 ===")
         println("📁 头文件目录: ${headerDir.absolutePath}")
         println("📦 生成的头文件:")
         println("  - k_server_dex.h: ${dexFile.length()} 字节")
@@ -536,39 +471,8 @@ tasks.register("generateEmbeddedFiles") {
     }
 }
 
-fun generateFileHeader(inputFile: File, outputFile: File, varName: String) {
-    if (!inputFile.exists()) {
-        throw GradleException("文件不存在: ${inputFile.absolutePath}")
-    }
-
-    val bytes = inputFile.readBytes()
-
-    outputFile.writeText("""
-#ifndef ${varName.toUpperCase()}_H
-#define ${varName.toUpperCase()}_H
-
-unsigned char ${varName}_data[] = {
-${bytes.withIndex().chunked(12) { chunk ->
-    "  " + chunk.joinToString(", ") { (_, byte) ->
-        "0x%02x".format(byte.toInt() and 0xFF)
-    }
-}.joinToString(",\n")}
-};
-
-unsigned int ${varName}_len = ${bytes.size};
-
-#endif // ${varName.toUpperCase()}_H
-""".trimIndent())
-
-    println("✅ 生成 ${outputFile.name}: ${bytes.size} 字节")
-}
-
-// ================================
-// 客户端程序构建任务
-// ================================
-
 /**
- * 构建Android平台的客户端可执行程序
+ * 构建Android平台的客户端可执行程序, 产出k-client
  */
 tasks.register("buildClient") {
     group = "client"
@@ -584,93 +488,63 @@ tasks.register("buildClient") {
         println("源码目录: ${sourceDir.absolutePath}")
         println("构建目录: ${buildDir.absolutePath}")
         println("输出目录: ${binDir.absolutePath}")
-        // 检查源码目录
         if (!sourceDir.exists()) {
-            throw GradleException("源码目录不存在: ${sourceDir.absolutePath}")
+            throw GradleException("❌ 源码目录不存在: ${sourceDir.absolutePath}")
         }
-        // 清理并创建构建目录
         if (buildDir.exists()) {
             buildDir.deleteRecursively()
         }
         buildDir.mkdirs()
         binDir.mkdirs()
-        // 检查Android NDK
-        val androidNdk = findAndroidNdk()
-        println("使用NDK: $androidNdk")
-        // 创建客户端专用的CMakeLists.txt
         val clientCMakeFile = File(buildDir, "CMakeLists.txt")
         clientCMakeFile.writeText(generateClientCMakeContent(sourceDir, binDir))
-        // 查找CMake路径
-        val cmakePath = try {
-            findCMakePath()
-        } catch (e: Exception) {
-            println("❌ CMake查找失败: ${e.message}")
-            throw GradleException("无法找到CMake工具，请确保CMake已正确安装并在PATH中", e)
-        }
-        println("✅ 使用CMake: $cmakePath")
-        // 验证CMake是否可执行
-        try {
-            val testResult = ProcessBuilder(cmakePath, "--version")
-                .start()
-                .waitFor()
-            if (testResult != 0) {
-                throw GradleException("CMake版本检查失败，退出码: $testResult")
-            }
-        } catch (e: Exception) {
-            throw GradleException("CMake无法执行: ${e.message}，路径: $cmakePath", e)
-        }
         // 配置CMake
-        val cmakeConfigCmd = listOf(
-            cmakePath,
-            buildDir.absolutePath,
-            "-DCMAKE_TOOLCHAIN_FILE=$androidNdk/build/cmake/android.toolchain.cmake",
-            "-DANDROID_ABI=arm64-v8a",
-            "-DANDROID_PLATFORM=android-24",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DDISABLE_JNI=ON"
-        )
-        println("配置CMake...")
-        val configResult = project.exec {
-            workingDir = buildDir
-            commandLine = cmakeConfigCmd
-            isIgnoreExitValue = true
+        if (providers.exec {
+                workingDir(buildDir)
+                commandLine(
+                    listOf(
+                        findCMakePath(),
+                        buildDir.absolutePath,
+                        "-DCMAKE_TOOLCHAIN_FILE=${findAndroidNdk()}/build/cmake/android.toolchain.cmake",
+                        "-DANDROID_ABI=arm64-v8a",
+                        "-DANDROID_PLATFORM=android-24",
+                        "-DCMAKE_BUILD_TYPE=Release",
+                        "-DDISABLE_JNI=ON"
+                    )
+                )
+                isIgnoreExitValue = true
+            }.result.get().exitValue != 0) {
+            throw GradleException("❌ CMake编译失败")
         }
-        if (configResult.exitValue != 0) {
-            throw GradleException("CMake配置失败")
-        }
+        println("✅ CMake编译成功")
         // 编译
-        println("开始编译...")
-        val buildResult = project.exec {
-            workingDir = buildDir
-            commandLine = listOf("make", "-j${Runtime.getRuntime().availableProcessors()}")
-            isIgnoreExitValue = true
-        }
-        if (buildResult.exitValue != 0) {
-            throw GradleException("编译失败")
+        if (providers.exec {
+                workingDir(buildDir)
+                commandLine(listOf("make", "-j${Runtime.getRuntime().availableProcessors()}"))
+                isIgnoreExitValue = true
+            }.result.get().exitValue != 0) {
+            throw GradleException("❌ Make编译失败")
         }
         // 检查生成的可执行文件
         val clientBinary = File(binDir, "k-client")
-        if (clientBinary.exists()) {
-            // 复制到输出目录
-            outputDir.mkdirs()
-            val outputBinary = File(outputDir, "k-client")
-            clientBinary.copyTo(outputBinary, overwrite = true)
-
-            println("\n=== 🎉 客户端构建完成 ===")
-            println("📁 输出目录: ${outputDir.absolutePath}")
-            println("📦 输出文件:")
-            println("  - k-client: ${outputBinary.length()} 字节")
-            println()
-            println("🚀 部署到设备:")
-            println("  adb push ${outputBinary.absolutePath} /data/local/tmp/")
-            println()
-            println("▶️  运行客户端:")
-            println("  adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=SHARED_MEMORY --memorySize=16777216 --auto-start-server --debug'")
-            println("  adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=UNIX_SOCKET --socketName=k.socket --auto-start-server --debug'")
-            println("  adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=TCP_SOCKET --tcpHost=127.0.0.1 --tcpPort=7777 --auto-start-server --debug'")
-        } else {
-            throw GradleException("未找到生成的可执行文件: ${clientBinary.absolutePath}")
+        if (!clientBinary.exists()) {
+            throw GradleException("❌ 未找到生成的可执行文件: ${clientBinary.absolutePath}")
         }
+        // 复制到输出目录
+        outputDir.mkdirs()
+        val outputBinary = File(outputDir, "k-client")
+        clientBinary.copyTo(outputBinary, overwrite = true)
+        println("✅ 复制到输出目录: ${outputBinary.absolutePath}")
+        println("=== 🎉 客户端构建完成 ===")
+        println("📁 输出目录: ${outputDir.absolutePath}")
+        println("📦 输出文件:")
+        println("  - k-client: ${outputBinary.length()} 字节")
+        println("🚀 部署到设备:")
+        println("adb push ${outputBinary.absolutePath} /data/local/tmp/")
+        println("▶️  运行客户端:")
+        println("adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=SHARED_MEMORY --memorySize=16777216 --auto-start-server --debug'")
+        println("adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=UNIX_SOCKET --socketName=k.socket --auto-start-server --debug'")
+        println("adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=TCP_SOCKET --tcpHost=127.0.0.1 --tcpPort=7777 --auto-start-server --debug'")
     }
 }
 
