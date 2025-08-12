@@ -36,8 +36,7 @@ android {
         release {
             isMinifyEnabled = false
             proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
+                getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
             )
         }
     }
@@ -69,8 +68,10 @@ dependencies {
 }
 
 val isWindows = System.getProperty("os.name").lowercase().contains("windows")
-val androidHome: String? = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+val androidHome: String? =
+    System.getenv("ANDROID_HOME") ?: throw GradleException("ANDROID_HOME 未设置")
 val ndkFromEnv: String? = System.getenv("ANDROID_NDK") ?: System.getenv("ANDROID_NDK_ROOT")
+val javaHome = System.getenv("JAVA_HOME") ?: throw GradleException("JAVA_HOME 未设置")
 
 /**
  * 查找Android NDK路径
@@ -79,16 +80,14 @@ fun findAndroidNdk(): String {
     if (ndkFromEnv != null && File(ndkFromEnv).exists()) {
         return ndkFromEnv
     }
-    if (androidHome != null) {
-        val ndkDir = File(androidHome, "ndk")
-        if (ndkDir.exists()) {
-            val ndkVersions = ndkDir.listFiles()?.filter {
-                it.isDirectory && it.name.matches(Regex("\\d+\\..*"))
-            }?.sortedByDescending { it.name }
-            if (ndkVersions?.isNotEmpty() == true) {
-                println("✅ 找到NDK: ${ndkVersions.first().absolutePath}")
-                return ndkVersions.first().absolutePath
-            }
+    val ndkDir = File(androidHome, "ndk")
+    if (ndkDir.exists()) {
+        val ndkVersions = ndkDir.listFiles()?.filter {
+            it.isDirectory && it.name.matches(Regex("\\d+\\..*"))
+        }?.sortedByDescending { it.name }
+        if (ndkVersions?.isNotEmpty() == true) {
+            println("✅ 找到NDK: ${ndkVersions.first().absolutePath}")
+            return ndkVersions.first().absolutePath
         }
     }
     throw GradleException("❌ 未找到Android NDK。请设置环境变量 ANDROID_NDK 或 ANDROID_NDK_ROOT")
@@ -102,14 +101,11 @@ fun findCMakePath(): String {
         isWindows -> File("${androidHome}\\cmake").listFiles()
             .map { "${it.absolutePath}\\bin\\cmake.exe" }
 
-        else -> File("${androidHome}/cmake").listFiles()
-            .map { "${it.absolutePath}/bin/cmake" }
+        else -> File("${androidHome}/cmake").listFiles().map { "${it.absolutePath}/bin/cmake" }
     }
     for (path in possiblePaths) {
         try {
-            val process = ProcessBuilder(path, "--version")
-                .redirectErrorStream(true)
-                .start()
+            val process = ProcessBuilder(path, "--version").redirectErrorStream(true).start()
             val result = process.waitFor()
             if (result == 0) {
                 val output = process.inputStream.bufferedReader().readText()
@@ -127,8 +123,7 @@ fun findCMakePath(): String {
  */
 fun findD8Tool(): String {
     val path = File(androidHome, "build-tools").listFiles()
-        ?.filter { it.isDirectory && it.name.matches(Regex("\\d+\\..*")) }
-        ?.maxByOrNull { it.name }
+        ?.filter { it.isDirectory && it.name.matches(Regex("\\d+\\..*")) }?.maxByOrNull { it.name }
         ?.let { File(it, (if (isWindows) "d8.bat" else "d8")) }
     if (path?.exists() == true) {
         println("✅ 找到d8: ${path.absolutePath}")
@@ -138,9 +133,27 @@ fun findD8Tool(): String {
 }
 
 /**
+ * 查找JAR
+ * */
+fun findJar(): String {
+    val path = File(javaHome, "bin/${if (isWindows) "jar.exe" else "jar"}")
+    if (path.exists() == true) {
+        println("✅ 找到jar: ${path.absolutePath}")
+        return path.absolutePath
+    }
+    throw GradleException("❌ 未找到jar，请检查JDK安装")
+}
+
+fun normalizePath(path: String): String {
+    return path.replace("\\", "/")
+}
+
+/**
  * 生成客户端专用的CMakeLists.txt内容（支持OpenCV）
  */
 fun generateClientCMakeContent(sourceDir: File, binDir: File): String {
+    val srcPath = normalizePath(sourceDir.absolutePath)
+    val outPath = normalizePath(binDir.absolutePath)
     return """
 cmake_minimum_required(VERSION 3.22.1)
 
@@ -161,15 +174,15 @@ add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wno-unused-function -O2
 add_definitions(-UANDROID -U__ANDROID__ -DDISABLE_JNI)
 
 # 设置OpenCV路径
-set(OpenCV_DIR "${sourceDir.absolutePath}/client/opencv")
-set(OpenCV_INCLUDE_DIRS "${sourceDir.absolutePath}/client/opencv/include")
-set(OpenCV_STATIC_LIBS_DIR "${sourceDir.absolutePath}/client/opencv/libs")
+set(OpenCV_DIR "${srcPath}/client/opencv")
+set(OpenCV_INCLUDE_DIRS "${srcPath}/client/opencv/include")
+set(OpenCV_STATIC_LIBS_DIR "${srcPath}/client/opencv/libs")
 
 # 包含OpenCV头文件
 include_directories(${'$'}{OpenCV_INCLUDE_DIRS})
 
 # 包含嵌入文件头文件
-include_directories("${sourceDir.absolutePath}/client/embedded")
+include_directories("${srcPath}/client/embedded")
 
 # 手动设置OpenCV库（按依赖顺序）
 set(OpenCV_LIBS
@@ -179,7 +192,7 @@ set(OpenCV_LIBS
 )
 
 # 添加第三方依赖库
-set(OpenCV_3RDPARTY_LIBS_DIR "${sourceDir.absolutePath}/client/opencv/3rdparty")
+set(OpenCV_3RDPARTY_LIBS_DIR "${srcPath}/client/opencv/3rdparty")
 set(OpenCV_3RDPARTY_LIBS
     ${'$'}{OpenCV_3RDPARTY_LIBS_DIR}/libtegra_hal.a
     ${'$'}{OpenCV_3RDPARTY_LIBS_DIR}/libtbb.a
@@ -199,14 +212,14 @@ message(STATUS "OpenCV libraries: ${'$'}{OpenCV_LIBS}")
 
 # 创建客户端可执行文件
 add_executable(k-client
-    ${sourceDir.absolutePath}/client/main.c
-    ${sourceDir.absolutePath}/client/client_opencv.cpp
-    ${sourceDir.absolutePath}/client/core/client_core.c
-    ${sourceDir.absolutePath}/client/transport/client_shared_memory.c
-    ${sourceDir.absolutePath}/client/transport/client_unix.c
-    ${sourceDir.absolutePath}/client/transport/client_tcp.c
-    ${sourceDir.absolutePath}/common/ashmem.c
-    ${sourceDir.absolutePath}/common/log.c
+    ${srcPath}/client/main.c
+    ${srcPath}/client/client_opencv.cpp
+    ${srcPath}/client/core/client_core.c
+    ${srcPath}/client/transport/client_shared_memory.c
+    ${srcPath}/client/transport/client_unix.c
+    ${srcPath}/client/transport/client_tcp.c
+    ${srcPath}/common/ashmem.c
+    ${srcPath}/common/log.c
 )
 
 # 链接OpenCV静态库和依赖库
@@ -237,7 +250,7 @@ target_link_libraries(k-client -static-libstdc++)
 
 # 设置输出目录
 set_target_properties(k-client PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY "${binDir.absolutePath}"
+    RUNTIME_OUTPUT_DIRECTORY "$outPath"
 )
 """.trimIndent()
 }
@@ -246,6 +259,8 @@ set_target_properties(k-client PROPERTIES
  * 生成服务器专用的CMakeLists.txt内容
  */
 fun generateServerCMakeContent(sourceDir: File, binDir: File): String {
+    val srcPath = normalizePath(sourceDir.absolutePath)
+    val outPath = normalizePath(binDir.absolutePath)
     return """
 cmake_minimum_required(VERSION 3.22.1)
 
@@ -259,13 +274,13 @@ add_compile_options(-Wall -Wextra -Wno-unused-parameter -Wno-unused-function -O2
 
 # 创建服务器共享库（只包含服务器功能，不包含客户端）
 add_library(server-k SHARED
-    ${sourceDir.absolutePath}/server/core/server_core.c
-    ${sourceDir.absolutePath}/server/jni/server_jni_bridge.c
-    ${sourceDir.absolutePath}/server/transport/server_shared_memory.c
-    ${sourceDir.absolutePath}/server/transport/server_unix.c
-    ${sourceDir.absolutePath}/server/transport/server_tcp.c
-    ${sourceDir.absolutePath}/common/ashmem.c
-    ${sourceDir.absolutePath}/common/log.c
+    ${srcPath}/server/core/server_core.c
+    ${srcPath}/server/jni/server_jni_bridge.c
+    ${srcPath}/server/transport/server_shared_memory.c
+    ${srcPath}/server/transport/server_unix.c
+    ${srcPath}/server/transport/server_tcp.c
+    ${srcPath}/common/ashmem.c
+    ${srcPath}/common/log.c
 )
 
 # 链接Android日志库
@@ -289,7 +304,7 @@ endif()
 
 # 设置输出目录
 set_target_properties(server-k PROPERTIES
-    LIBRARY_OUTPUT_DIRECTORY "${binDir.absolutePath}"
+    LIBRARY_OUTPUT_DIRECTORY "$outPath"
 )
 """.trimIndent()
 }
@@ -328,7 +343,6 @@ unsigned int ${varName}_len = ${bytes.size};
 tasks.register("buildServer") {
     group = "server"
     description = "构建服务器程序，产出k-server.dex和libserver-k.so"
-    // 依赖Java编译任务
     dependsOn("compileDebugJavaWithJavac")
     doLast {
         val projectRoot = project.rootDir
@@ -354,16 +368,27 @@ tasks.register("buildServer") {
         val serverCMakeFile = File(buildDir, "CMakeLists.txt")
         serverCMakeFile.writeText(generateServerCMakeContent(sourceDir, binDir))
         // 配置CMake
+        val cmakeBuildDir = File(buildDir, "cmake-out").apply { mkdirs() }
+        val cmakeSourceDir = buildDir
+        val cmake = findCMakePath()
+        val ninja = "${File(cmake).parent}${if (isWindows) "\\ninja.exe" else "/ninja"}"
+        val ndk = findAndroidNdk()
         if (providers.exec {
                 workingDir(buildDir)
                 commandLine(
                     listOf(
-                        findCMakePath(),
-                        buildDir.absolutePath,
-                        "-DCMAKE_TOOLCHAIN_FILE=${findAndroidNdk()}/build/cmake/android.toolchain.cmake",
+                        cmake,
+                        "-G",
+                        "Ninja", // 强制使用 Ninja
+                        "-DCMAKE_MAKE_PROGRAM=${ninja}",
+                        "-DCMAKE_TOOLCHAIN_FILE=${ndk}/build/cmake/android.toolchain.cmake",
                         "-DANDROID_ABI=arm64-v8a",
                         "-DANDROID_PLATFORM=android-24",
-                        "-DCMAKE_BUILD_TYPE=Release"
+                        "-DCMAKE_BUILD_TYPE=Release",
+                        "-S",
+                        cmakeSourceDir.absolutePath,
+                        "-B",
+                        cmakeBuildDir.absolutePath
                     )
                 )
                 isIgnoreExitValue = true
@@ -373,8 +398,13 @@ tasks.register("buildServer") {
         println("✅ CMake编译成功")
         // 编译
         if (providers.exec {
-                workingDir(buildDir)
-                commandLine(listOf("make", "-j${Runtime.getRuntime().availableProcessors()}"))
+                workingDir(cmakeBuildDir)
+                commandLine(
+                    listOf(
+                        ninja,
+                        "-j${Runtime.getRuntime().availableProcessors()}"
+                    )
+                )
                 isIgnoreExitValue = true
             }.result.get().exitValue != 0) {
             throw GradleException("❌ Make编译失败")
@@ -410,14 +440,23 @@ tasks.register("buildServer") {
         val tempJarFile = File(buildDir, "server-k-classes.jar")
         if (providers.exec {
                 workingDir(classesDir)
-                commandLine(listOf("jar", "cf", tempJarFile.absolutePath, "."))
+                commandLine(listOf(findJar(), "cf", tempJarFile.absolutePath, "."))
                 isIgnoreExitValue = true
             }.result.get().exitValue != 0) {
             throw GradleException("❌ 创建临时JAR文件失败")
         }
         println("✅ 创建临时JAR文件: ${tempJarFile.absolutePath}")
         if (providers.exec {
-                commandLine(listOf(findD8Tool(), "--min-api", "24", "--output", outputDir.absolutePath, tempJarFile.absolutePath) + jars)
+                commandLine(
+                    listOf(
+                        findD8Tool(),
+                        "--min-api",
+                        "24",
+                        "--output",
+                        outputDir.absolutePath,
+                        tempJarFile.absolutePath
+                    ) + jars
+                )
                 isIgnoreExitValue = true
             }.result.get().exitValue != 0) {
             throw GradleException("❌ D8工具编译失败")
@@ -499,17 +538,28 @@ tasks.register("buildClient") {
         val clientCMakeFile = File(buildDir, "CMakeLists.txt")
         clientCMakeFile.writeText(generateClientCMakeContent(sourceDir, binDir))
         // 配置CMake
+        val cmake = findCMakePath()
+        val ninja = "${File(cmake).parent}${if (isWindows) "\\ninja.exe" else "/ninja"}"
+        val ndk = findAndroidNdk()
+        val cmakeBuildDir = File(buildDir, "cmake-out").apply { mkdirs() }
+        val cmakeSourceDir = buildDir
         if (providers.exec {
                 workingDir(buildDir)
                 commandLine(
                     listOf(
-                        findCMakePath(),
-                        buildDir.absolutePath,
-                        "-DCMAKE_TOOLCHAIN_FILE=${findAndroidNdk()}/build/cmake/android.toolchain.cmake",
+                        cmake,
+                        "-G",
+                        "Ninja", // 强制使用 Ninja
+                        "-DCMAKE_MAKE_PROGRAM=${ninja}",
+                        "-DCMAKE_TOOLCHAIN_FILE=${ndk}/build/cmake/android.toolchain.cmake",
                         "-DANDROID_ABI=arm64-v8a",
                         "-DANDROID_PLATFORM=android-24",
                         "-DCMAKE_BUILD_TYPE=Release",
-                        "-DDISABLE_JNI=ON"
+                        "-DDISABLE_JNI=ON",
+                        "-S",
+                        cmakeSourceDir.absolutePath,
+                        "-B",
+                        cmakeBuildDir.absolutePath
                     )
                 )
                 isIgnoreExitValue = true
@@ -519,8 +569,13 @@ tasks.register("buildClient") {
         println("✅ CMake编译成功")
         // 编译
         if (providers.exec {
-                workingDir(buildDir)
-                commandLine(listOf("make", "-j${Runtime.getRuntime().availableProcessors()}"))
+                workingDir(cmakeBuildDir)
+                commandLine(
+                    listOf(
+                        ninja,
+                        "-j${Runtime.getRuntime().availableProcessors()}"
+                    )
+                )
                 isIgnoreExitValue = true
             }.result.get().exitValue != 0) {
             throw GradleException("❌ Make编译失败")
@@ -547,5 +602,4 @@ tasks.register("buildClient") {
         println("adb shell 'cd /data/local/tmp && chmod +x k-client && ./k-client --mode=TCP_SOCKET --tcpHost=127.0.0.1 --tcpPort=7777 --auto-start-server --debug'")
     }
 }
-
 
