@@ -16,35 +16,25 @@
         app:title="222"
         app:titleTextColor="@color/white" />
 
-    <androidx.appcompat.widget.AppCompatSpinner
-        android:id="@+id/spinnerMode"
-        android:layout_width="wrap_content"
-        android:layout_height="40dp"
-        android:layout_marginTop="16dp"
-        android:entries="@array/modeSwitch"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/toolbar" />
-
     <Button
         android:id="@+id/btnStart"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
+        android:layout_marginTop="16dp"
         android:text="启动"
-        app:layout_constraintBottom_toBottomOf="@+id/spinnerMode"
-        app:layout_constraintStart_toEndOf="@+id/spinnerMode"
-        app:layout_constraintTop_toTopOf="@+id/spinnerMode" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/toolbar" />
 
     <Button
         android:id="@+id/btnScreenshot"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
-        android:text="截图"
         android:enabled="false"
-        app:layout_constraintBottom_toBottomOf="@+id/spinnerMode"
+        android:text="截图"
+        app:layout_constraintBottom_toBottomOf="@+id/btnStart"
         app:layout_constraintStart_toEndOf="@+id/btnStart"
-        app:layout_constraintTop_toTopOf="@+id/spinnerMode" />
+        app:layout_constraintTop_toTopOf="@+id/btnStart" />
 
     <TextView
         android:id="@+id/tvScreenshot"

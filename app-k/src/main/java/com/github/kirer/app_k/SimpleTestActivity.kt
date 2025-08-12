@@ -59,7 +59,6 @@ class SimpleTestActivity : AppCompatActivity() {
     }
 
     private val toolbar: Toolbar by lazy { findViewById<Toolbar>(R.id.toolbar) }
-    private val spinner: AppCompatSpinner by lazy { findViewById<AppCompatSpinner>(R.id.spinnerMode) }
     private val btnStart: Button by lazy { findViewById<Button>(R.id.btnStart) }
     private val tvScreenshot: TextView by lazy { findViewById<TextView>(R.id.tvScreenshot) }
     private val ivScreenshot: ImageView by lazy { findViewById<ImageView>(R.id.ivScreenshot) }
@@ -83,7 +82,6 @@ class SimpleTestActivity : AppCompatActivity() {
                 delay(1000)
             }
         }
-        val arr = resources.getStringArray(R.array.modeSwitch)
         btnStart.setOnClickListener {
             if (btnStart.text == "停止") {
                 btnStart.text = "启动"
@@ -93,11 +91,7 @@ class SimpleTestActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             btnStart.text = "停止"
-            when (spinner.selectedItem.toString()) {
-                arr[0] -> useSharedMemory()
-                arr[1] -> useUnixSocket()
-                arr[2] -> useTcpSocket()
-            }
+            useTcpSocket()
         }
         findViewById<Button>(R.id.btnScreenshot).setOnClickListener {
             takeScreenshot()
@@ -202,35 +196,10 @@ class SimpleTestActivity : AppCompatActivity() {
         }
     }
 
-    private fun useSharedMemory() {
-        lifecycleScope.launch {
-            val config = Config(Mode.SHARED_MEMORY, applicationInfo.nativeLibraryDir)
-            config.memorySize = ScreenCaptureService.getScreenshotMemorySize()
-            val serverStarted = startServer(config)
-            if (serverStarted) {
-                delay(1000)
-                connect(config)
-            }
-        }
-    }
-
-    private fun useUnixSocket() {
-        lifecycleScope.launch {
-            val config = Config(Mode.UNIX_SOCKET, applicationInfo.nativeLibraryDir)
-            config.socketName = "server-k.socket"
-            val serverStarted = startServer(config)
-            if (serverStarted) {
-                delay(1000)
-                connect(config)
-            }
-        }
-    }
-
     private fun useTcpSocket() {
         lifecycleScope.launch {
-            val config = Config(Mode.TCP_SOCKET, applicationInfo.nativeLibraryDir)
-            config.tcpHost = "127.0.0.1"
-            config.tcpPort = 7777
+            val config = Config(Mode.TCP_SOCKET, "127.0.0.1:7777", applicationInfo.nativeLibraryDir)
+            config.isDebug = true
             val serverStarted = startServer(config)
             if (serverStarted) {
                 delay(1000)
@@ -243,36 +212,24 @@ class SimpleTestActivity : AppCompatActivity() {
         withContext(Dispatchers.IO) {
             try {
                 val appCodePath = applicationInfo.sourceDir
-                Log.d(TAG, "========== 启动 ${config.mode} 服务器 ==========")
+                Log.d(TAG, "========== 启动 ${config.socketType} 服务器 ==========")
                 val launcherClass = Launcher::class.java.name
-                val command = when (config.mode) {
-                    Mode.SHARED_MEMORY -> {
-                        "CLASSPATH=${appCodePath} app_process /system/bin $launcherClass --mode=SHARED_MEMORY --libPath=${config.libPath} > /data/local/tmp/server-k.log 2>&1 &"
-                    }
-
-                    Mode.UNIX_SOCKET -> {
-                        "CLASSPATH=${appCodePath} app_process /system/bin $launcherClass --mode=UNIX_SOCKET --libPath=${config.libPath} --socketName=${config.socketName} > /data/local/tmp/server-k.log 2>&1 &"
-                    }
-
-                    Mode.TCP_SOCKET -> {
-                        "CLASSPATH=${appCodePath} app_process /system/bin $launcherClass --mode=TCP_SOCKET --libPath=${config.libPath} --tcpPort=${config.tcpPort} --tcpHost=${config.tcpHost} > /data/local/tmp/server-k.log 2>&1 &"
-                    }
-                }
+                val command = "CLASSPATH=${appCodePath} app_process /system/bin $launcherClass --lib-path=${config.libPath} --socket-type=tcp --address=${config.address} --debug > /data/local/tmp/server-k.log 2>&1 &"
                 val result = shizukuManager.execute(command)
                 if (result.success) {
                     Log.d(TAG, "✅ 服务器启动成功")
                     Log.d(TAG, "输出: ${result.output}")
-                    showToast("${config.mode} 服务器已启动")
+                    showToast("${config.socketType} 服务器已启动")
                     return@withContext true
                 } else {
-                    Log.d(TAG, "❌ ${config.mode} 服务器启动失败")
+                    Log.d(TAG, "❌ ${config.socketType} 服务器启动失败")
                     Log.d(TAG, "错误: ${result.error}")
                     Log.d(TAG, "退出码: ${result.exitCode}")
                     showToast("服务器启动失败")
                     return@withContext false
                 }
             } catch (e: Exception) {
-                Log.d(TAG, "❌ 启动 ${config.mode} 服务器时出错: ${e.message}")
+                Log.d(TAG, "❌ 启动 ${config.socketType} 服务器时出错: ${e.message}")
                 Log.e(TAG, "启动服务器失败", e)
                 showToast("启动失败: ${e.message}")
                 return@withContext false
@@ -299,9 +256,12 @@ class SimpleTestActivity : AppCompatActivity() {
         updateButtonsState(false)
         lifecycleScope.launch(Dispatchers.Main) {
             try {
-                Log.d(TAG, "========== 开始连接 ${config.mode} 模式 ==========")
+                Log.d(TAG, "========== 开始连接 ${config.socketType} 模式 ==========")
                 Client.disconnect()
-                Client.initializeWithParams(Mode.getModeValue(config.mode), config.memorySize, config.socketName, config.tcpHost, config.tcpPort)
+                if(Client.initialize(Mode.getModeValue(config.socketType), config.address, config.isDebug) != 0){
+                    Log.d(TAG, "❌ 初始化客户端失败")
+                    return@launch
+                }
                 val startTime = System.currentTimeMillis()
                 val status = withContext(Dispatchers.IO) {
                     Client.connect()
@@ -309,15 +269,15 @@ class SimpleTestActivity : AppCompatActivity() {
                 Log.d(TAG, "   - 连接耗时: ${System.currentTimeMillis() - startTime}ms")
                 Log.d(TAG, "   - 连接状态: $status")
                 if(status == 0) {
-                    Log.d(TAG, "✅ ${config.mode} 连接成功!")
-                    showToast("${config.mode} 连接成功")
+                    Log.d(TAG, "✅ ${config.socketType} 连接成功!")
+                    showToast("${config.socketType} 连接成功")
                 }else{
-                    Log.d(TAG, "❌ ${config.mode} 连接失败")
-                    showToast("${config.mode} 连接失败")
+                    Log.d(TAG, "❌ ${config.socketType} 连接失败")
+                    showToast("${config.socketType} 连接失败")
                 }
-                Log.d(TAG, "========== ${config.mode} 连接完成 ==========\n")
+                Log.d(TAG, "========== ${config.socketType} 连接完成 ==========\n")
             } catch (e: Exception) {
-                Log.d(TAG, "❌ 连接 ${config.mode} 时出错: ${e.message}")
+                Log.d(TAG, "❌ 连接 ${config.socketType} 时出错: ${e.message}")
                 Log.e(TAG, "连接失败", e)
                 showToast("连接失败: ${e.message}")
             } finally {
@@ -331,20 +291,20 @@ class SimpleTestActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.Main) {
             try {
                 val startTime = System.currentTimeMillis()
-                val response: Client.Response = withContext(Dispatchers.IO) {
-                    Client.takeScreenshot()
-                }
-                val totalTime = System.currentTimeMillis() - startTime
-                if (response.isSuccess) {
-                    tvScreenshot.text =
-                        "截图成功，耗时: ${totalTime}ms，服务器处理时间: ${response.processingTime}ms，文件大小: ${
-                            formatFileSize(response.dataSize)
-                        }"
-                    response.data?.apply { displayScreenshot(this) }
-                } else {
-                    tvScreenshot.text = "截图失败: ${response.message}"
-                    showToast("截图失败: ${response.message}")
-                }
+//                val response: Client.Response = withContext(Dispatchers.IO) {
+//                    Client.readScreenshot()
+//                }
+//                val totalTime = System.currentTimeMillis() - startTime
+//                if (response.isSuccess) {
+//                    tvScreenshot.text =
+//                        "截图成功，耗时: ${totalTime}ms，服务器处理时间: ${response.processingTime}ms，文件大小: ${
+//                            formatFileSize(response.dataSize)
+//                        }"
+//                    response.data?.apply { displayScreenshot(this) }
+//                } else {
+//                    tvScreenshot.text = "截图失败: ${response.message}"
+//                    showToast("截图失败: ${response.message}")
+//                }
             } catch (e: Exception) {
                 Log.d(TAG, "❌ 截图异常: ${e.message}")
                 Log.e(TAG, "截图失败", e)

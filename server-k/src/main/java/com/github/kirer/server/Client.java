@@ -1,8 +1,13 @@
 package com.github.kirer.server;
 
 /**
- * Native客户端JNI接口类
+ * Server-K 客户端JNI接口类 (v2.0.0)
  * 提供C语言实现的客户端功能
+ * <p>
+ * 新架构特点:
+ * - 数据层: 从共享内存读取截图数据，实现高性能数据传输
+ * - 控制层: 通过Socket通信进行服务控制和状态查询
+ * - 分层设计: 数据获取与控制逻辑分离，提升性能和可维护性
  */
 public class Client {
 
@@ -76,17 +81,14 @@ public class Client {
     }
 
     /**
-     * 使用参数初始化客户端
+     * 初始化客户端 - 新分层架构
      *
-     * @param mode 通信模式 (0=SHARED_MEMORY, 1=UNIX_SOCKET, 2=TCP_SOCKET)
-     * @param memorySize 共享内存大小（仅共享内存模式使用）
-     * @param socketName Unix套接字名称（仅Unix套接字模式使用）
-     * @param tcpHost TCP主机地址（仅TCP模式使用）
-     * @param tcpPort TCP端口（仅TCP模式使用）
+     * @param socketType Socket控制层类型 (1=UNIX_SOCKET, 2=TCP_SOCKET)
+     * @param address    统一地址格式 (Unix: socket名称, TCP: host:port)
+     * @param debug      是否启用调试模式
      * @return 0表示成功，-1表示失败
      */
-    public static native int initializeWithParams(int mode, int memorySize,
-                                                  String socketName, String tcpHost, int tcpPort);
+    public static native int initialize(int socketType, String address, boolean debug);
 
     /**
      * 连接到服务器
@@ -98,19 +100,28 @@ public class Client {
     /**
      * 断开连接
      */
-    public static native void disconnect();
+    public static native int disconnect();
 
     /**
-     * 截图
+     * 读取截图数据
      *
-     * @return 响应对象
+     * @return 包含截图数据的响应对象
      */
-    public static native Response takeScreenshot();
+    public static native byte[] readScreenshot();
 
     /**
-     * 获取客户端状态信息
+     * 获取客户端状态
      *
-     * @return 状态信息字符串
+     * @return 包含状态信息的响应对象
      */
-    public static native String getStatusInfo();
+    public static native int getState();
+
+
+    /**
+     * 获取客户端统计信息
+     *
+     * @return 统计信息数组
+     */
+    public static native int clean();
+
 }

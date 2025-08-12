@@ -55,11 +55,4 @@
     <string name="performance_throughput">吞吐量: %.2f/s</string>
 
 
-    <array name="modeSwitch">
-        <item>内存共享</item>
-        <item>Unix Socket</item>
-        <item>TCP Socket</item>
-    </array>
-
-
 </resources>
