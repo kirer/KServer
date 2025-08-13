@@ -199,9 +199,13 @@ static void *client_receive_thread(void *arg) {
                 LOG_DEBUG(CLIENT_LOG_TAG, "收到心跳响应");
                 break;
             default:
-                LOG_WARN(CLIENT_LOG_TAG, "收到消息类型: %d", msg->type);
-                if (g_client.on_message) {
-                    g_client.on_message(msg->type, msg->data, msg->data_size);
+                if (IS_BUSINESS_MESSAGE(msg->type)) {
+                    LOG_DEBUG(CLIENT_LOG_TAG, "收到业务消息类型: %d", msg->type);
+                    if (g_client.on_message) {
+                        g_client.on_message(msg->type, msg->data, msg->data_size);
+                    }
+                } else {
+                    LOG_WARN(CLIENT_LOG_TAG, "收到未知协议消息类型: %d", msg->type);
                 }
                 break;
         }
@@ -377,7 +381,7 @@ int client_cleanup(void) {
 }
 
 #if defined(__ANDROID__) && !defined(DISABLE_JNI)
-#include "jni_common.h"
+#include "common_jni.h"
 
 static jobject g_java_callback = NULL;
 

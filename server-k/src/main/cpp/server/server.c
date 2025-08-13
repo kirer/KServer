@@ -216,9 +216,13 @@ static int server_handle_client(int client_fd) {
                 return 0;
             }
             default:
-                LOG_WARN(SERVER_LOG_TAG, "收到消息类型: %d", msg->type);
-                if (g_server.on_message) {
-                    g_server.on_message(msg->type, msg->data, msg->data_size);
+                if (IS_BUSINESS_MESSAGE(msg->type)) {
+                    LOG_DEBUG(SERVER_LOG_TAG, "收到业务消息类型: %d", msg->type);
+                    if (g_server.on_message) {
+                        g_server.on_message(msg->type, msg->data, msg->data_size);
+                    }
+                } else {
+                    LOG_WARN(SERVER_LOG_TAG, "收到未知协议消息类型: %d", msg->type);
                 }
                 break;
         }
@@ -453,7 +457,7 @@ int server_cleanup(void) {
 }
 
 #if defined(__ANDROID__) && !defined(DISABLE_JNI)
-#include "jni_common.h"
+#include "common_jni.h"
 
 // JNI接口实现
 static jobject g_java_callback = NULL;
@@ -523,12 +527,25 @@ Java_com_github_kirer_server_Server_sendMessage(JNIEnv *env, jclass clazz, jint 
     if (g_server.state != SERVER_STATE_RUNNING) {
         return -1;
     }
+    
+    // 获取Java字节数组的实际数据
+    jbyte *data_ptr = NULL;
+    jsize data_len = 0;
+    if (data != NULL) {
+        data_len = (*env)->GetArrayLength(env, data);
+        data_ptr = (*env)->GetByteArrayElements(env, data, NULL);
+        if (data_ptr == NULL) {
+            LOG_ERROR(SERVER_LOG_TAG, "获取字节数组数据失败");
+            return -1;
+        }
+    }
+    
     pthread_mutex_lock(&g_server.clients_mutex);
     int success_count = 0;
     for (int i = 0; i < g_server.client_count; i++) {
         if (g_server.clients[i].active) {
-            if (server_send_message(g_server.clients[i].socket_fd, type, &data, sizeof(data)) ==
-                0) {
+            if (server_send_message(g_server.clients[i].socket_fd, (message_type_t)type, 
+                                  data_ptr, (uint32_t)data_len) == 0) {
                 success_count++;
             } else {
                 LOG_WARN(SERVER_LOG_TAG, "通知客户端 %d 失败", i);
@@ -536,7 +553,14 @@ Java_com_github_kirer_server_Server_sendMessage(JNIEnv *env, jclass clazz, jint 
         }
     }
     pthread_mutex_unlock(&g_server.clients_mutex);
-    LOG_DEBUG(SERVER_LOG_TAG, "通知 %d 个客户端", success_count);
+    
+    // 释放字节数组资源
+    if (data_ptr != NULL) {
+        (*env)->ReleaseByteArrayElements(env, data, data_ptr, JNI_ABORT);
+    }
+    
+    LOG_DEBUG(SERVER_LOG_TAG, "通知 %d 个客户端，消息类型: %d，数据长度: %d", 
+              success_count, type, data_len);
     return success_count > 0 ? 0 : -1;
 }
 

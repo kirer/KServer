@@ -8,13 +8,23 @@
  * 用于Socket通信的控制信令和通知机制
  */
 
-// 消息类型枚举
+// 消息类型枚举 - 只包含核心协议消息
 typedef enum {
     MSG_TYPE_INIT_REQ = 1,                  // 客户端请求初始化
     MSG_TYPE_INIT_RESP = 2,                 // 服务端返回
     MSG_TYPE_HEARTBEAT = 3,                 // 心跳消息
     MSG_TYPE_DISCONNECT = 4                 // 断开连接
 } message_type_t;
+
+// 消息类型范围定义
+#define MSG_TYPE_PROTOCOL_MIN    1          // 协议消息最小值
+#define MSG_TYPE_PROTOCOL_MAX    99         // 协议消息最大值
+#define MSG_TYPE_BUSINESS_MIN    100        // 业务消息最小值
+#define MSG_TYPE_BUSINESS_MAX    999        // 业务消息最大值
+
+// 消息类型判断宏
+#define IS_PROTOCOL_MESSAGE(type) ((type) >= MSG_TYPE_PROTOCOL_MIN && (type) <= MSG_TYPE_PROTOCOL_MAX)
+#define IS_BUSINESS_MESSAGE(type) ((type) >= MSG_TYPE_BUSINESS_MIN && (type) <= MSG_TYPE_BUSINESS_MAX)
 
 // Socket类型枚举
 typedef enum {
@@ -41,41 +51,7 @@ typedef struct {
     uint32_t reserved;              // 保留字段
 } init_response_data_t;
 
-// 截图通知数据
-typedef struct {
-    uint64_t timestamp;             // 截图时间戳
-    uint32_t data_size;             // 截图数据大小
-    uint32_t reserved;              // 保留字段
-} screenshot_notify_data_t;
-
-// 错误消息数据
-typedef struct {
-    uint32_t error_code;            // 错误代码
-    uint32_t message_len;           // 错误消息长度
-    char message[];                 // 错误消息内容
-} error_message_data_t;
-
 // 协议版本
 #define PROTOCOL_VERSION 1
-
-
-// 错误代码定义
-#define ERROR_CODE_SUCCESS 0
-#define ERROR_CODE_INVALID_REQUEST 1
-#define ERROR_CODE_MEMORY_ERROR 2
-#define ERROR_CODE_DISPLAY_ERROR 3
-#define ERROR_CODE_SOCKET_ERROR 4
-#define ERROR_CODE_UNKNOWN 999
-
-// 消息大小计算宏
-#define CONTROL_MESSAGE_SIZE(data_size) (sizeof(control_message_t) + (data_size))
-#define INIT_REQUEST_MESSAGE_SIZE CONTROL_MESSAGE_SIZE(sizeof(init_request_data_t))
-#define INIT_RESPONSE_MESSAGE_SIZE CONTROL_MESSAGE_SIZE(sizeof(init_response_data_t))
-#define SCREENSHOT_NOTIFY_MESSAGE_SIZE CONTROL_MESSAGE_SIZE(sizeof(screenshot_notify_data_t))
-
-// 默认配置
-#define DEFAULT_TCP_PORT 7777
-#define DEFAULT_UNIX_SOCKET_NAME "k.socket"
-#define DEFAULT_SHM_SIZE (1920 * 1080 * 4 * 1.2)  // 默认共享内存大小
 
 #endif // PROTOCOL_H

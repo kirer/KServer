@@ -94,9 +94,6 @@ class SimpleTestActivity : AppCompatActivity() {
             btnStart.text = "停止"
             useTcpSocket()
         }
-        findViewById<Button>(R.id.btnScreenshot).setOnClickListener {
-            takeScreenshot()
-        }
     }
 
     /**
@@ -155,7 +152,6 @@ class SimpleTestActivity : AppCompatActivity() {
         requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
         when (requestCode) {
             REQUEST_CODE_STORAGE_PERMISSION -> {
                 val allGranted = grantResults.all { it == PackageManager.PERMISSION_GRANTED }
@@ -196,6 +192,7 @@ class SimpleTestActivity : AppCompatActivity() {
 
     private fun useTcpSocket() {
         lifecycleScope.launch {
+            updateButtonsState(false)
             val config = Config(applicationInfo.nativeLibraryDir, Mode.TCP_SOCKET, "127.0.0.1:7777")
             config.isDebug = true
             val serverStarted = startServer(config)
@@ -244,19 +241,20 @@ class SimpleTestActivity : AppCompatActivity() {
             } else {
                 Log.d(TAG, "停止服务器进程: ${result.error}")
             }
-            updateButtonsState(false)
+            updateButtonsState(true)
         } catch (e: Exception) {
             Log.d(TAG, "停止服务器进程时出错: ${e.message}")
         }
     }
 
     private fun connect(config: Config) {
-        updateButtonsState(false)
         lifecycleScope.launch(Dispatchers.Main) {
             try {
                 Log.d(TAG, "========== 开始连接 ${config.socketType} 模式 ==========")
                 Client.disconnect()
-                if (Client.initialize(Mode.getModeValue(config.socketType), config.address, config.isDebug) != 0
+                if (Client.initialize(
+                        Mode.getModeValue(config.socketType), config.address, config.isDebug
+                    ) != 0
                 ) {
                     Log.d(TAG, "❌ 初始化客户端失败")
                     return@launch
@@ -292,12 +290,14 @@ class SimpleTestActivity : AppCompatActivity() {
                             Server.MSG_TYPE_NOTIFY_SCREEN_CAPTURE -> {
                                 Log.d(TAG, "收到屏幕截图通知")
                                 val data = ShareMemory.read()
-                                displayScreenshot(data)
+                                runOnUiThread {
+                                    displayScreenshot(data)
+                                }
                             }
                         }
                     }
                 })
-                if(Client.sendMessage(Server.MSG_TYPE_INIT_SCREEN_CAPTURE, null) != 0) {
+                if (Client.sendMessage(Server.MSG_TYPE_INIT_SCREEN_CAPTURE, null) != 0) {
                     Log.d(TAG, "❌ 发送屏幕截图初始化消息失败")
                     return@launch
                 }
@@ -313,37 +313,10 @@ class SimpleTestActivity : AppCompatActivity() {
         }
     }
 
-    @SuppressLint("SetTextI18n")
-    private fun takeScreenshot() {
-        lifecycleScope.launch(Dispatchers.Main) {
-            try {
-                val startTime = System.currentTimeMillis()
-//                val response: Client.Response = withContext(Dispatchers.IO) {
-//                    Client.readScreenshot()
-//                }
-//                val totalTime = System.currentTimeMillis() - startTime
-//                if (response.isSuccess) {
-//                    tvScreenshot.text =
-//                        "截图成功，耗时: ${totalTime}ms，服务器处理时间: ${response.processingTime}ms，文件大小: ${
-//                            formatFileSize(response.dataSize)
-//                        }"
-//                    response.data?.apply { displayScreenshot(this) }
-//                } else {
-//                    tvScreenshot.text = "截图失败: ${response.message}"
-//                    showToast("截图失败: ${response.message}")
-//                }
-            } catch (e: Exception) {
-                Log.d(TAG, "❌ 截图异常: ${e.message}")
-                Log.e(TAG, "截图失败", e)
-                showToast("截图异常: ${e.message}")
-            }
-        }
-    }
-
     private fun updateButtonsState(enabled: Boolean) {
         // 确保在主线程中更新按钮状态
         runOnUiThread {
-            findViewById<Button>(R.id.btnScreenshot).isEnabled = enabled
+            findViewById<Button>(R.id.btnStart).isEnabled = enabled
         }
     }
 
@@ -362,6 +335,7 @@ class SimpleTestActivity : AppCompatActivity() {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private fun displayScreenshot(data: ByteArray) {
         try {
             // 解析共享内存数据格式：前8字节是头部（宽度和高度），后面是RGBA像素数据
@@ -369,28 +343,19 @@ class SimpleTestActivity : AppCompatActivity() {
                 Log.d(TAG, "数据格式错误：数据太小")
                 return
             }
-
             // 解析宽高（小端序）
             val width =
                 ((data[3].toInt() and 0xFF) shl 24) or ((data[2].toInt() and 0xFF) shl 16) or ((data[1].toInt() and 0xFF) shl 8) or (data[0].toInt() and 0xFF)
             val height =
                 ((data[7].toInt() and 0xFF) shl 24) or ((data[6].toInt() and 0xFF) shl 16) or ((data[5].toInt() and 0xFF) shl 8) or (data[4].toInt() and 0xFF)
-
             // 验证数据大小
             val pixelData = data.copyOfRange(8, data.size)
             val expectedPixelDataSize = width * height * 4
-            Log.d(
-                TAG,
-                "解析截图数据: ${width}x${height}, 像素数据大小: ${pixelData.size}, 期望: $expectedPixelDataSize"
-            )
-
             if (pixelData.size != expectedPixelDataSize) {
                 Log.w(TAG, "像素数据大小不匹配，可能影响显示效果")
             }
-
             val bitmap = createBitmap(width, height)
             val pixels = IntArray(width * height)
-
             // 转换RGBA到ARGB
             for (i in pixels.indices) {
                 val baseIndex = i * 4
@@ -402,9 +367,9 @@ class SimpleTestActivity : AppCompatActivity() {
                     pixels[i] = (a shl 24) or (r shl 16) or (g shl 8) or b
                 }
             }
-
             bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
-            Log.d(TAG, "✅ 显示截图成功: ${bitmap.width}x${bitmap.height}")
+            tvScreenshot.text =
+                "✅ 截图大小: ${formatFileSize(data.size)}, ${bitmap.width}x${bitmap.height}"
             ivScreenshot.setImageBitmap(bitmap)
         } catch (e: Exception) {
             Log.e(TAG, "❌ 显示截图失败: ${e.message}", e)
