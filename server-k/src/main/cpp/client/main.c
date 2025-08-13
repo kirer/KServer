@@ -1,6 +1,6 @@
 #include "client.h"
-#include "embedded/k_server_dex.h"
-#include "embedded/libserver_k_so.h"
+#include "embedded/server_dex.h"
+#include "embedded/lib_so.h"
 #include "common/shared_memory.h"
 
 #include <stdio.h>
@@ -18,13 +18,6 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
 #endif
-
-// 声明嵌入文件的变量
-extern unsigned char k_server_dex_data[];
-extern unsigned int k_server_dex_len;
-extern unsigned char libserver_k_so_data[];
-extern unsigned int libserver_k_so_len;
-
 #define MAIN_LOG_TAG "K-CLIENT-MAIN"
 
 // 全局变量
@@ -133,8 +126,9 @@ void on_message(message_type_t type, const uint8_t *data, uint32_t data_size) {
                     screenshot_size = (screenshot_size << 8) | data[i];
                 }
                 g_screenshot_count++;
-                LOG_INFO(MAIN_LOG_TAG, "收到截图通知 #%d: 大小=%u 字节, 时间戳=%llu", g_screenshot_count, screenshot_size, (unsigned long long) timestamp);
-                save_screenshot_to_file(screenshot_data, screenshot_size, timestamp);
+                LOG_INFO(MAIN_LOG_TAG, "收到截图通知 #%d: 大小=%u 字节, 时间戳=%llu",
+                         g_screenshot_count, screenshot_size, (unsigned long long) timestamp);
+//                save_screenshot_to_file(screenshot_data, screenshot_size, timestamp);
             }
             break;
         }
@@ -202,15 +196,12 @@ int write_temp_file(const char *filepath, const unsigned char *data, size_t size
         LOG_ERROR(MAIN_LOG_TAG, "无法创建文件: %s - %s", filepath, strerror(errno));
         return -1;
     }
-
     size_t written = fwrite(data, 1, size, fp);
     fclose(fp);
-
     if (written != size) {
         LOG_ERROR(MAIN_LOG_TAG, "写入文件失败: %s", filepath);
         return -1;
     }
-
     /* 设置执行权限（对于.so文件） */
     if (strstr(filepath, ".so") != NULL) {
         if (chmod(filepath, 0755) != 0) {
@@ -218,7 +209,6 @@ int write_temp_file(const char *filepath, const unsigned char *data, size_t size
             return -1;
         }
     }
-
     return 0;
 }
 
@@ -228,28 +218,23 @@ int write_temp_file(const char *filepath, const unsigned char *data, size_t size
 int extract_embedded_files(const char *temp_dir) {
     char dex_path[512];
     char so_path[512];
-
-    snprintf(dex_path, sizeof(dex_path), "%s/k_server.dex", temp_dir);
-    snprintf(so_path, sizeof(so_path), "%s/libserver_k.so", temp_dir);
-
+    snprintf(dex_path, sizeof(dex_path), "%s/server.dex", temp_dir);
+    snprintf(so_path, sizeof(so_path), "%s/lib.so", temp_dir);
     /* 检查文件是否已存在 */
     if (check_file_exists(dex_path) && check_file_exists(so_path)) {
         LOG_INFO(MAIN_LOG_TAG, "嵌入文件已存在，跳过释放");
         return 0;
     }
-
     /* 释放DEX文件 */
-    if (write_temp_file(dex_path, k_server_dex_data, k_server_dex_len) < 0) {
+    if (write_temp_file(dex_path, server_data, server_len) < 0) {
         return -1;
     }
-    LOG_INFO(MAIN_LOG_TAG, "已释放DEX文件: %s (%u 字节)", dex_path, k_server_dex_len);
-
+    LOG_INFO(MAIN_LOG_TAG, "已释放DEX文件: %s (%u 字节)", dex_path, server_len);
     /* 释放SO文件 */
-    if (write_temp_file(so_path, libserver_k_so_data, libserver_k_so_len) < 0) {
+    if (write_temp_file(so_path, lib_data, lib_len) < 0) {
         return -1;
     }
-    LOG_INFO(MAIN_LOG_TAG, "已释放SO文件: %s (%u 字节)", so_path, libserver_k_so_len);
-
+    LOG_INFO(MAIN_LOG_TAG, "已释放SO文件: %s (%u 字节)", so_path, lib_len);
     return 0;
 }
 

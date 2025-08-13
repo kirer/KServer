@@ -214,8 +214,8 @@ public class Launcher {
         try {
             Ln.i("[" + TAG + "] 开始初始化Server-K服务器");
             // 1. 加载native库
-            Ln.d("[" + TAG + "] 加载库文件: " + CONFIG.getLibPath() + "/libserver-k.so");
-            System.load(CONFIG.getLibPath() + "/libserver-k.so");
+            Ln.d("[" + TAG + "] 加载库文件: " + CONFIG.getLibPath() + "/lib.so");
+            System.load(CONFIG.getLibPath() + "/lib.so");
             Ln.i("[" + TAG + "] 库文件加载完成");
             // 2. 准备初始化Socket控制层服务器
             Ln.d("[" + TAG + "] 准备初始化" + CONFIG.getSocketType() + "控制层服务器");
