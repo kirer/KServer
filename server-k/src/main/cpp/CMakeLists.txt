@@ -5,6 +5,8 @@ project("server-k")
 
 # 设置C标准
 set(CMAKE_C_STANDARD 99)
+# 设置C++标准（用于OpenCV支持）
+set(CMAKE_CXX_STANDARD 17)
 
 # 添加编译选项
 add_compile_options(-Wall -Wextra -O2)
@@ -42,7 +44,7 @@ set(SERVER_SOURCES
 set(CLIENT_SOURCES
     ${COMMON_SOURCES}
     client/client.c
-    client/main.cpp
+    client/main.c
 )
 
 # 创建服务端共享库
@@ -69,4 +71,36 @@ endif ()
 set_target_properties(server-k PROPERTIES
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/libs"
 )
+
+# 如果不是Android平台，或者定义了BUILD_CLIENT，则构建客户端可执行文件
+if(NOT ANDROID OR DEFINED BUILD_CLIENT)
+    # 创建客户端可执行文件
+    add_executable(k-client ${CLIENT_SOURCES})
+    
+    # 链接OpenCV（如果可用）
+    if(OpenCV_FOUND)
+        target_link_libraries(k-client ${OpenCV_LIBS})
+    endif()
+    
+    # 链接pthread库
+    if(NOT ANDROID)
+        find_library(pthread-lib pthread)
+        if(pthread-lib)
+            target_link_libraries(k-client ${pthread-lib})
+        else()
+            target_link_libraries(k-client pthread)
+        endif()
+    endif()
+    
+    # Android平台特定配置
+    if(ANDROID)
+        find_library(log-lib log)
+        target_link_libraries(k-client ${log-lib})
+    endif()
+    
+    # 设置输出目录
+    set_target_properties(k-client PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../../../build/bin"
+    )
+endif()
 
