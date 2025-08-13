@@ -256,9 +256,7 @@ class SimpleTestActivity : AppCompatActivity() {
             try {
                 Log.d(TAG, "========== 开始连接 ${config.socketType} 模式 ==========")
                 Client.disconnect()
-                if (Client.initialize(
-                        Mode.getModeValue(config.socketType), config.address, config.isDebug
-                    ) != 0
+                if (Client.initialize(Mode.getModeValue(config.socketType), config.address, config.isDebug) != 0
                 ) {
                     Log.d(TAG, "❌ 初始化客户端失败")
                     return@launch
@@ -269,36 +267,41 @@ class SimpleTestActivity : AppCompatActivity() {
                 }
                 Log.d(TAG, "   - 连接耗时: ${System.currentTimeMillis() - startTime}ms")
                 Log.d(TAG, "   - 连接状态: $status")
-                if (status == 0) {
-                    Log.d(TAG, "✅ ${config.socketType} 连接成功!")
-                    showToast("${config.socketType} 连接成功")
-                    Client.setMessageCallback(object : Client.ClientMessageListener {
-                        override fun onMessage(type: Int, data: ByteArray?) {
-                            when (type) {
-                                Server.MSG_TYPE_NOTIFY_SHARE_MEMORY_SIZE -> {
-                                    data?.let {
-                                        val memorySize = ByteBuffer.wrap(it).int
-                                        Log.d(TAG, "共享内存大小: $memorySize")
-                                        if (ShareMemory.connect(memorySize) == 0) {
-                                            Log.d(TAG, "已连接共享内存")
-                                        } else {
-                                            Log.d(TAG, "连接共享内存失败")
-                                        }
-                                    }
-                                }
-
-                                Server.MSG_TYPE_NOTIFY_SCREEN_CAPTURE -> {
-                                    Log.d(TAG, "收到屏幕截图通知")
-                                    val data = ShareMemory.read()
-                                    displayScreenshot(data)
-                                }
-                            }
-                        }
-                    })
-                } else {
+                if (status != 0) {
                     Log.d(TAG, "❌ ${config.socketType} 连接失败")
                     showToast("${config.socketType} 连接失败")
+                    return@launch
                 }
+                Log.d(TAG, "✅ ${config.socketType} 连接成功!")
+                showToast("${config.socketType} 连接成功")
+                Client.setMessageCallback(object : Client.ClientMessageListener {
+                    override fun onMessage(type: Int, data: ByteArray?) {
+                        when (type) {
+                            Server.MSG_TYPE_NOTIFY_SHARE_MEMORY_SIZE -> {
+                                data?.let {
+                                    val memorySize = ByteBuffer.wrap(it).int
+                                    Log.d(TAG, "共享内存大小: $memorySize")
+                                    if (ShareMemory.connect(memorySize) == 0) {
+                                        Log.d(TAG, "已连接共享内存")
+                                    } else {
+                                        Log.d(TAG, "连接共享内存失败")
+                                    }
+                                }
+                            }
+
+                            Server.MSG_TYPE_NOTIFY_SCREEN_CAPTURE -> {
+                                Log.d(TAG, "收到屏幕截图通知")
+                                val data = ShareMemory.read()
+                                displayScreenshot(data)
+                            }
+                        }
+                    }
+                })
+                if(Client.sendMessage(Server.MSG_TYPE_INIT_SCREEN_CAPTURE, null) != 0) {
+                    Log.d(TAG, "❌ 发送屏幕截图初始化消息失败")
+                    return@launch
+                }
+                Log.d(TAG, "========== 屏幕截图 ==========")
                 Log.d(TAG, "========== ${config.socketType} 连接完成 ==========\n")
             } catch (e: Exception) {
                 Log.d(TAG, "❌ 连接 ${config.socketType} 时出错: ${e.message}")

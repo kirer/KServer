@@ -453,16 +453,18 @@ int server_cleanup(void) {
 }
 
 #if defined(__ANDROID__) && !defined(DISABLE_JNI)
+#include "jni_common.h"
+
 // JNI接口实现
 static jobject g_java_callback = NULL;
-static JavaVM *g_java_vm = NULL;
 
 // 全局回调函数指针
 static void
 c_message_callback(message_type_t type, const uint8_t *data, uint32_t size) {
     if (!g_java_callback) return;
-    JNIEnv *env;
-    (*g_java_vm)->AttachCurrentThread(g_java_vm, (void **) &env, NULL);
+    JNIEnv *env = get_jni_env();
+    if (!env) return;
+    
     jclass cls = (*env)->GetObjectClass(env, g_java_callback);
     jmethodID mid = (*env)->GetMethodID(env, cls, "onMessage", "(I[B)V");
     if (!mid) return;
@@ -473,11 +475,6 @@ c_message_callback(message_type_t type, const uint8_t *data, uint32_t size) {
         (*env)->DeleteLocalRef(env, array);
     }
     (*env)->DeleteLocalRef(env, cls);
-}
-
-JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved) {
-    g_java_vm = vm;
-    return JNI_VERSION_1_6;
 }
 
 JNIEXPORT jint JNICALL

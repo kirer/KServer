@@ -28,6 +28,7 @@ include_directories(
 set(COMMON_SOURCES
     common/log.c
     common/shared_memory.c
+    common/jni_common.c
 )
 
 # 服务端源文件
