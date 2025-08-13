@@ -80,6 +80,10 @@ public class Client {
         }
     }
 
+    public interface ClientMessageListener {
+        void onMessage(int type, byte[] data);
+    }
+
     /**
      * 初始化客户端 - 新分层架构
      *
@@ -103,11 +107,18 @@ public class Client {
     public static native int disconnect();
 
     /**
-     * 读取截图数据
-     *
-     * @return 包含截图数据的响应对象
+     * 设置消息回调监听器
      */
-    public static native byte[] readScreenshot();
+    public static native void setMessageCallback(ClientMessageListener listener);
+
+    /**
+     * 发送消息给服务器
+     *
+     * @param msgType 消息类型
+     * @param data    消息数据
+     * @return 0表示成功，-1表示失败
+     */
+    public static native int sendMessage(int msgType, byte[] data);
 
     /**
      * 获取客户端状态

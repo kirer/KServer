@@ -7,10 +7,12 @@
 #include <pthread.h>
 
 #ifdef __ANDROID__
+
 #include <jni.h>
+
 #endif
 
-#define SERVER_LOG_TAG "SERVER-K2-SERVER"
+#define SERVER_LOG_TAG "SERVER-K-SERVER"
 
 // 服务器状态枚举
 typedef enum {
@@ -32,9 +34,11 @@ typedef struct {
 typedef struct {
     socket_type_t socket_type;
     char address[256];              // TCP: "host:port", Unix: "socket_name"
-    uint32_t shm_size;
     int debug;
 } server_config_t;
+
+// 消息回调函数
+typedef void (*server_message_callback_t)(message_type_t type, const uint8_t *data, uint32_t data_size);
 
 // 服务器实例
 typedef struct {
@@ -46,6 +50,7 @@ typedef struct {
     int client_count;
     pthread_mutex_t clients_mutex;
     int should_stop;
+    server_message_callback_t on_message; // 消息回调
 } server_t;
 
 // 全局服务器实例
@@ -107,38 +112,26 @@ int server_cleanup(void);
  * @param socket_type socket类型
  * @return 0成功，-1失败
  */
-int server_parse_address(const char *address, char *host, int *port, char *socket_name, socket_type_t socket_type);
+int server_parse_address(const char *address, char *host, int *port, char *socket_name,
+                         socket_type_t socket_type);
 
 // 内部函数声明
-static void* server_listen_thread(void *arg);
-static void* server_client_thread(void *arg);
+static void *server_listen_thread(void *arg);
+
+static void *server_client_thread(void *arg);
+
 static int server_handle_client(int client_fd);
+
 static int server_send_message(int fd, message_type_t type, const void *data, uint32_t data_size);
+
 static int server_recv_message(int fd, control_message_t **message);
+
 static int server_create_tcp_socket(const char *host, int port);
+
 static int server_create_unix_socket(const char *socket_name);
+
 static void server_close_client(client_connection_t *client);
+
 static void server_close_all_clients(void);
-
-#ifdef __ANDROID__
-// JNI接口
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Server_initialize(JNIEnv *env, jclass clazz, jint socket_type, jstring address, jint shm_size, jboolean debug);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Server_start(JNIEnv *env, jclass clazz);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Server_stop(JNIEnv *env, jclass clazz);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Server_writeScreenshot(JNIEnv *env, jclass clazz, jbyteArray data);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Server_getState(JNIEnv *env, jclass clazz);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Server_clean(JNIEnv *env, jclass clazz);
-#endif
 
 #endif // SERVER_H

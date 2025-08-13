@@ -26,7 +26,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * Server-K 屏幕截图服务类 (v2.0.0)
  * 负责管理屏幕捕获的整个生命周期
- * 
+ * <p>
  * 新架构特点:
  * - 数据层: 将截图数据写入共享内存，实现高性能数据传输
  * - 控制层: 通过Socket通信进行服务控制和状态管理
@@ -88,6 +88,16 @@ public class ScreenCaptureService {
         screenSize = displayInfo.getSize();
         Ln.i("[" + TAG + "] 屏幕尺寸: " + screenSize.getWidth() + "x" + screenSize.getHeight());
         Ln.d("[" + TAG + "] 屏幕捕获服务初始化完成");
+        Ln.d("[" + TAG + "] 初始化共享内存数据层");
+        int width = screenSize.getWidth() + BUFFER_PADDING_BYTES;
+        int height = screenSize.getHeight() + BUFFER_PADDING_BYTES;
+        int memorySize = width * height * BYTES_PER_PIXEL;
+        int result = ShareMemory.create(memorySize);
+        if (result != 0) {
+            throw new RuntimeException("共享内存创建失败，错误码: " + result);
+        }
+        Ln.i("[" + TAG + "] 数据层：共享内存已就绪, 大小: " + memorySize + " 字节");
+        Server.sendMessage(Server.MSG_TYPE_NOTIFY_SHARE_MEMORY_SIZE, ByteBuffer.allocate(4).order(ByteOrder.BIG_ENDIAN).putInt(memorySize).array());
     }
 
     /**
@@ -450,11 +460,11 @@ public class ScreenCaptureService {
                     return;
                 }
                 Ln.d("[" + TAG + "] 屏幕截图已写入共享内存 (" + imageWidth + "x" + imageHeight + ")，数据大小: " + totalSize + " 字节");
-                result = Server.writeScreenshot(reusableByteArray);
+                result = Server.sendMessage(Server.MSG_TYPE_NOTIFY_SCREEN_CAPTURE, null);
                 if (result == 0) {
-                    Ln.d("[" + TAG + "] 成功写入共享内存 (" + imageWidth + "x" + imageHeight + ")，数据大小: " + totalSize + " 字节");
+                    Ln.d("[" + TAG + "] 成功通知 (" + imageWidth + "x" + imageHeight + ")，数据大小: " + totalSize + " 字节");
                 } else {
-                    Ln.e("[" + TAG + "] 写入共享内存失败，错误码: " + result);
+                    Ln.e("[" + TAG + "] 通知失败，错误码: " + result);
                 }
             } catch (Exception e) {
                 Ln.e("[" + TAG + "] 写入共享内存时出错", e);

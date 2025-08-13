@@ -2,12 +2,13 @@
 #define CLIENT_H
 
 #include "../common/protocol.h"
-#include "../common/shared_memory.h"
 #include "../common/log.h"
 #include <pthread.h>
 
 #if defined(__ANDROID__) && !defined(DISABLE_JNI)
+
 #include <jni.h>
+
 #endif
 
 #define CLIENT_LOG_TAG "SERVER-K-CLIENT"
@@ -27,28 +28,18 @@ typedef struct {
     int debug;
 } client_config_t;
 
-// 服务器信息（从初始化响应获取）
-typedef struct {
-    uint32_t shm_size;
-    uint32_t screen_width;
-    uint32_t screen_height;
-    uint32_t pixel_format;
-    uint32_t server_version;
-} server_info_t;
+// 消息回调函数
+typedef void (*client_message_callback_t)(message_type_t type, const uint8_t *data, uint32_t data_size);
 
 // 客户端实例
 typedef struct {
     client_config_t config;
     client_state_t state;
     int socket_fd;
-    server_info_t server_info;
     pthread_t receive_thread;
     int should_stop;
-    
     // 回调函数
-    void (*on_screenshot)(const uint8_t *data, size_t size, uint64_t timestamp, void *user_data);
-    void (*on_error)(int error_code, const char *message, void *user_data);
-    void *user_data;
+    client_message_callback_t on_message; // 消息回调
 } client_t;
 
 // 全局客户端实例
@@ -80,35 +71,6 @@ int client_disconnect(void);
 client_state_t client_get_state(void);
 
 /**
- * 获取服务器信息
- * @return 服务器信息指针，未连接时返回NULL
- */
-const server_info_t* client_get_server_info(void);
-
-/**
- * 设置截图回调函数
- * @param callback 回调函数
- * @param user_data 用户数据
- */
-void client_set_screenshot_callback(void (*callback)(const uint8_t *data, size_t size, uint64_t timestamp, void *user_data), void *user_data);
-
-/**
- * 设置错误回调函数
- * @param callback 回调函数
- * @param user_data 用户数据
- */
-void client_set_error_callback(void (*callback)(int error_code, const char *message, void *user_data), void *user_data);
-
-/**
- * 手动读取一次截图数据
- * @param data 输出数据指针（调用者负责释放）
- * @param size 输出数据大小
- * @param timestamp 输出时间戳
- * @return 0成功，1无新数据，-1失败
- */
-int client_read_screenshot(uint8_t **data, size_t *size, uint64_t *timestamp);
-
-/**
  * 发送心跳消息
  * @return 0成功，-1失败
  */
@@ -129,42 +91,27 @@ int client_cleanup(void);
  * @param socket_type socket类型
  * @return 0成功，-1失败
  */
-int client_parse_address(const char *address, char *host, int *port, char *socket_name, socket_type_t socket_type);
+int client_parse_address(const char *address, char *host, int *port, char *socket_name,
+                         socket_type_t socket_type);
 
-// 内部函数声明
-static int client_connect_socket(void);
-static int client_send_init_request(void);
-static int client_handle_init_response(const control_message_t *msg);
-static void* client_receive_thread(void *arg);
-static int client_send_message(message_type_t type, const void *data, uint32_t data_size);
-static int client_recv_message(control_message_t **message);
+// 发送消息
+int client_send_message(message_type_t type, const void *data, uint32_t data_size);
+
+// 设置消息回调函数
+void client_set_message_callback(client_message_callback_t callback);
+
 static int client_create_tcp_connection(const char *host, int port);
+
 static int client_create_unix_connection(const char *socket_name);
-static void client_handle_screenshot_notify(const control_message_t *msg);
-static void client_handle_error_message(const control_message_t *msg);
 
-#if defined(__ANDROID__) && !defined(DISABLE_JNI)
-// JNI接口
+static int client_connect_socket(void);
 
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Client_initialize(JNIEnv *env, jclass clazz, jint socket_type, jstring address, jboolean debug);
+static int client_send_init_request(void);
 
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Client_connect(JNIEnv *env, jclass clazz);
+static int client_handle_init_response(const control_message_t *msg);
 
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Client_disconnect(JNIEnv *env, jclass clazz);
+static void *client_receive_thread(void *arg);
 
-JNIEXPORT jbyteArray JNICALL
-Java_com_github_kirer_server_Client_readScreenshot(JNIEnv *env, jclass clazz);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Client_getState(JNIEnv *env, jclass clazz);
-
-JNIEXPORT jint JNICALL
-Java_com_github_kirer_server_Client_clean(JNIEnv *env, jclass clazz);
-
-#endif
+static int client_recv_message(control_message_t **message);
 
 #endif // CLIENT_H
-

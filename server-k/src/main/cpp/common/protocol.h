@@ -10,19 +10,16 @@
 
 // 消息类型枚举
 typedef enum {
-    MSG_TYPE_INIT_REQ = 1,          // 客户端请求初始化
-    MSG_TYPE_INIT_RESP = 2,         // 服务端返回共享内存配置
-    MSG_TYPE_SCREENSHOT_NOTIFY = 3, // 服务端通知新截图可用
-    MSG_TYPE_SCREENSHOT_ACK = 4,    // 客户端确认收到截图（可选）
-    MSG_TYPE_ERROR = 5,             // 错误消息
-    MSG_TYPE_HEARTBEAT = 6,         // 心跳消息
-    MSG_TYPE_DISCONNECT = 7         // 断开连接
+    MSG_TYPE_INIT_REQ = 1,                  // 客户端请求初始化
+    MSG_TYPE_INIT_RESP = 2,                 // 服务端返回
+    MSG_TYPE_HEARTBEAT = 3,                 // 心跳消息
+    MSG_TYPE_DISCONNECT = 4                 // 断开连接
 } message_type_t;
 
 // Socket类型枚举
 typedef enum {
-    SOCKET_TYPE_TCP = 1,
-    SOCKET_TYPE_UNIX = 2
+    SOCKET_TYPE_UNIX = 1,
+    SOCKET_TYPE_TCP = 2,
 } socket_type_t;
 
 // 控制消息格式
@@ -40,8 +37,6 @@ typedef struct {
 
 // 初始化响应数据
 typedef struct {
-    uint32_t shm_size;              // 共享内存大小
-    uint32_t pixel_format;          // 像素格式 (RGBA_8888 = 1)
     uint32_t server_version;        // 服务端版本
     uint32_t reserved;              // 保留字段
 } init_response_data_t;
@@ -63,8 +58,6 @@ typedef struct {
 // 协议版本
 #define PROTOCOL_VERSION 1
 
-// 像素格式定义
-#define PIXEL_FORMAT_RGBA_8888 1
 
 // 错误代码定义
 #define ERROR_CODE_SUCCESS 0

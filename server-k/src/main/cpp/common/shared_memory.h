@@ -10,8 +10,8 @@
 #include <jni.h>
 #endif
 
-#define SHM_LOG_TAG "SERVER-K2-SHM"
-#define SHM_FILE_PATH "/data/local/tmp/server-k2-shm"
+#define SHM_LOG_TAG "SERVER-K-SHM"
+#define SHM_FILE_PATH "/data/local/tmp/server-k-shm"
 
 // 共享内存结构体
 typedef struct {

@@ -15,7 +15,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.AppCompatSpinner
 import androidx.appcompat.widget.Toolbar
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -27,11 +26,13 @@ import com.github.kirer.server.Client
 import com.github.kirer.server.Config
 import com.github.kirer.server.Launcher
 import com.github.kirer.server.Mode
-import com.github.kirer.server.ScreenCaptureService
+import com.github.kirer.server.Server
+import com.github.kirer.server.ShareMemory
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.nio.ByteBuffer
 
 class SimpleTestActivity : AppCompatActivity() {
 
@@ -126,22 +127,22 @@ class SimpleTestActivity : AppCompatActivity() {
         } else {
             // Android 6-10 申请传统存储权限
             val permissions = mutableListOf<String>()
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.READ_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED
             ) {
                 permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
             }
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                != PackageManager.PERMISSION_GRANTED
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.WRITE_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED
             ) {
                 permissions.add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
             }
             if (permissions.isNotEmpty()) {
                 Log.d(TAG, "申请传统存储权限: $permissions")
                 ActivityCompat.requestPermissions(
-                    this,
-                    permissions.toTypedArray(),
-                    REQUEST_CODE_STORAGE_PERMISSION
+                    this, permissions.toTypedArray(), REQUEST_CODE_STORAGE_PERMISSION
                 )
             } else {
                 Log.d(TAG, "✅ 已有传统存储权限")
@@ -151,9 +152,7 @@ class SimpleTestActivity : AppCompatActivity() {
     }
 
     override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
+        requestCode: Int, permissions: Array<out String>, grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
@@ -189,8 +188,7 @@ class SimpleTestActivity : AppCompatActivity() {
             return true
         } catch (e: UnsatisfiedLinkError) {
             Ln.e(
-                "[$TAG] 加载 libserver-k.so 失败，这可能是因为库未正确打包到APK中",
-                e
+                "[$TAG] 加载 libserver-k.so 失败，这可能是因为库未正确打包到APK中", e
             )
             return false
         }
@@ -198,7 +196,7 @@ class SimpleTestActivity : AppCompatActivity() {
 
     private fun useTcpSocket() {
         lifecycleScope.launch {
-            val config = Config(Mode.TCP_SOCKET, "127.0.0.1:7777", applicationInfo.nativeLibraryDir)
+            val config = Config(applicationInfo.nativeLibraryDir, Mode.TCP_SOCKET, "127.0.0.1:7777")
             config.isDebug = true
             val serverStarted = startServer(config)
             if (serverStarted) {
@@ -208,33 +206,33 @@ class SimpleTestActivity : AppCompatActivity() {
         }
     }
 
-    private suspend fun startServer(config: Config): Boolean =
-        withContext(Dispatchers.IO) {
-            try {
-                val appCodePath = applicationInfo.sourceDir
-                Log.d(TAG, "========== 启动 ${config.socketType} 服务器 ==========")
-                val launcherClass = Launcher::class.java.name
-                val command = "CLASSPATH=${appCodePath} app_process /system/bin $launcherClass --lib-path=${config.libPath} --socket-type=tcp --address=${config.address} --debug > /data/local/tmp/server-k.log 2>&1 &"
-                val result = shizukuManager.execute(command)
-                if (result.success) {
-                    Log.d(TAG, "✅ 服务器启动成功")
-                    Log.d(TAG, "输出: ${result.output}")
-                    showToast("${config.socketType} 服务器已启动")
-                    return@withContext true
-                } else {
-                    Log.d(TAG, "❌ ${config.socketType} 服务器启动失败")
-                    Log.d(TAG, "错误: ${result.error}")
-                    Log.d(TAG, "退出码: ${result.exitCode}")
-                    showToast("服务器启动失败")
-                    return@withContext false
-                }
-            } catch (e: Exception) {
-                Log.d(TAG, "❌ 启动 ${config.socketType} 服务器时出错: ${e.message}")
-                Log.e(TAG, "启动服务器失败", e)
-                showToast("启动失败: ${e.message}")
+    private suspend fun startServer(config: Config): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val appCodePath = applicationInfo.sourceDir
+            Log.d(TAG, "========== 启动 ${config.socketType} 服务器 ==========")
+            val launcherClass = Launcher::class.java.name
+            val command =
+                "CLASSPATH=${appCodePath} app_process /system/bin $launcherClass --lib-path=${config.libPath} --socket-type=tcp --address=${config.address} --debug > /data/local/tmp/server-k.log 2>&1 &"
+            val result = shizukuManager.execute(command)
+            if (result.success) {
+                Log.d(TAG, "✅ 服务器启动成功")
+                Log.d(TAG, "输出: ${result.output}")
+                showToast("${config.socketType} 服务器已启动")
+                return@withContext true
+            } else {
+                Log.d(TAG, "❌ ${config.socketType} 服务器启动失败")
+                Log.d(TAG, "错误: ${result.error}")
+                Log.d(TAG, "退出码: ${result.exitCode}")
+                showToast("服务器启动失败")
                 return@withContext false
             }
+        } catch (e: Exception) {
+            Log.d(TAG, "❌ 启动 ${config.socketType} 服务器时出错: ${e.message}")
+            Log.e(TAG, "启动服务器失败", e)
+            showToast("启动失败: ${e.message}")
+            return@withContext false
         }
+    }
 
     private suspend fun stopServer() {
         try {
@@ -258,7 +256,10 @@ class SimpleTestActivity : AppCompatActivity() {
             try {
                 Log.d(TAG, "========== 开始连接 ${config.socketType} 模式 ==========")
                 Client.disconnect()
-                if(Client.initialize(Mode.getModeValue(config.socketType), config.address, config.isDebug) != 0){
+                if (Client.initialize(
+                        Mode.getModeValue(config.socketType), config.address, config.isDebug
+                    ) != 0
+                ) {
                     Log.d(TAG, "❌ 初始化客户端失败")
                     return@launch
                 }
@@ -268,10 +269,33 @@ class SimpleTestActivity : AppCompatActivity() {
                 }
                 Log.d(TAG, "   - 连接耗时: ${System.currentTimeMillis() - startTime}ms")
                 Log.d(TAG, "   - 连接状态: $status")
-                if(status == 0) {
+                if (status == 0) {
                     Log.d(TAG, "✅ ${config.socketType} 连接成功!")
                     showToast("${config.socketType} 连接成功")
-                }else{
+                    Client.setMessageCallback(object : Client.ClientMessageListener {
+                        override fun onMessage(type: Int, data: ByteArray?) {
+                            when (type) {
+                                Server.MSG_TYPE_NOTIFY_SHARE_MEMORY_SIZE -> {
+                                    data?.let {
+                                        val memorySize = ByteBuffer.wrap(it).int
+                                        Log.d(TAG, "共享内存大小: $memorySize")
+                                        if (ShareMemory.connect(memorySize) == 0) {
+                                            Log.d(TAG, "已连接共享内存")
+                                        } else {
+                                            Log.d(TAG, "连接共享内存失败")
+                                        }
+                                    }
+                                }
+
+                                Server.MSG_TYPE_NOTIFY_SCREEN_CAPTURE -> {
+                                    Log.d(TAG, "收到屏幕截图通知")
+                                    val data = ShareMemory.read()
+                                    displayScreenshot(data)
+                                }
+                            }
+                        }
+                    })
+                } else {
                     Log.d(TAG, "❌ ${config.socketType} 连接失败")
                     showToast("${config.socketType} 连接失败")
                 }
@@ -344,19 +368,18 @@ class SimpleTestActivity : AppCompatActivity() {
             }
 
             // 解析宽高（小端序）
-            val width = ((data[3].toInt() and 0xFF) shl 24) or
-                    ((data[2].toInt() and 0xFF) shl 16) or
-                    ((data[1].toInt() and 0xFF) shl 8) or
-                    (data[0].toInt() and 0xFF)
-            val height = ((data[7].toInt() and 0xFF) shl 24) or
-                    ((data[6].toInt() and 0xFF) shl 16) or
-                    ((data[5].toInt() and 0xFF) shl 8) or
-                    (data[4].toInt() and 0xFF)
+            val width =
+                ((data[3].toInt() and 0xFF) shl 24) or ((data[2].toInt() and 0xFF) shl 16) or ((data[1].toInt() and 0xFF) shl 8) or (data[0].toInt() and 0xFF)
+            val height =
+                ((data[7].toInt() and 0xFF) shl 24) or ((data[6].toInt() and 0xFF) shl 16) or ((data[5].toInt() and 0xFF) shl 8) or (data[4].toInt() and 0xFF)
 
             // 验证数据大小
             val pixelData = data.copyOfRange(8, data.size)
             val expectedPixelDataSize = width * height * 4
-            Log.d(TAG, "解析截图数据: ${width}x${height}, 像素数据大小: ${pixelData.size}, 期望: $expectedPixelDataSize")
+            Log.d(
+                TAG,
+                "解析截图数据: ${width}x${height}, 像素数据大小: ${pixelData.size}, 期望: $expectedPixelDataSize"
+            )
 
             if (pixelData.size != expectedPixelDataSize) {
                 Log.w(TAG, "像素数据大小不匹配，可能影响显示效果")

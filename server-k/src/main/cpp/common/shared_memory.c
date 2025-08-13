@@ -29,22 +29,17 @@ uint64_t shm_get_timestamp(void) {
 int shm_create(size_t size) {
     // 总大小 = 头部(16字节) + 数据区域
     size_t total_size = size + 16;
-    
     LOG_INFO(SHM_LOG_TAG, "创建共享内存，数据大小: %zu 字节，总大小: %zu 字节", size, total_size);
-    
     // 清理现有资源
     shm_cleanup();
-    
     // 删除可能存在的文件
     unlink(SHM_FILE_PATH);
-    
     // 创建文件
     int fd = open(SHM_FILE_PATH, O_CREAT | O_RDWR, 0666);
     if (fd < 0) {
         LOG_ERROR(SHM_LOG_TAG, "创建共享内存文件失败: %s", strerror(errno));
         return -1;
     }
-    
     // 设置文件大小
     if (ftruncate(fd, (off_t)total_size) < 0) {
         LOG_ERROR(SHM_LOG_TAG, "设置共享内存文件大小失败: %s", strerror(errno));
@@ -52,7 +47,6 @@ int shm_create(size_t size) {
         unlink(SHM_FILE_PATH);
         return -1;
     }
-    
     // 映射内存
     void *base = mmap(NULL, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
     if (base == MAP_FAILED) {
@@ -61,7 +55,6 @@ int shm_create(size_t size) {
         unlink(SHM_FILE_PATH);
         return -1;
     }
-    
     // 初始化全局结构体
     g_shm.fd = fd;
     g_shm.base = base;
@@ -70,12 +63,10 @@ int shm_create(size_t size) {
     g_shm.data_size = (uint64_t *)((unsigned char *)base + 8);
     g_shm.data_ptr = (unsigned char *)base + 16;
     g_shm.last_read_timestamp = 0;
-    
     // 初始化头部数据
     *g_shm.timestamp = 0;
     *g_shm.data_size = 0;
-    
-    LOG_INFO(SHM_LOG_TAG, "共享内存创建成功");
+    LOG_INFO(SHM_LOG_TAG, "共享内存创建成功：%d，%s", g_shm.fd, base);
     return 0;
 }
 
@@ -134,7 +125,7 @@ int shm_connect(size_t size) {
  */
 int shm_write(const void *data, size_t size) {
     if (!data || !shm_is_initialized()) {
-        LOG_ERROR(SHM_LOG_TAG, "写入失败：参数无效或共享内存未初始化");
+        LOG_ERROR(SHM_LOG_TAG, "写入失败：参数无效或共享内存未初始化: %d", g_shm.fd);
         return -1;
     }
     
@@ -242,7 +233,6 @@ int shm_is_initialized(void) {
  */
 int shm_cleanup(void) {
     int result = 0;
-    
     if (g_shm.base != NULL && g_shm.base != MAP_FAILED) {
         if (munmap(g_shm.base, g_shm.total_size) < 0) {
             LOG_ERROR(SHM_LOG_TAG, "取消内存映射失败: %s", strerror(errno));
@@ -250,7 +240,6 @@ int shm_cleanup(void) {
         }
         g_shm.base = NULL;
     }
-    
     if (g_shm.fd >= 0) {
         if (close(g_shm.fd) < 0) {
             LOG_ERROR(SHM_LOG_TAG, "关闭文件描述符失败: %s", strerror(errno));
@@ -258,14 +247,12 @@ int shm_cleanup(void) {
         }
         g_shm.fd = -1;
     }
-    
     // 重置结构体
     g_shm.total_size = 0;
     g_shm.timestamp = NULL;
     g_shm.data_size = NULL;
     g_shm.data_ptr = NULL;
     g_shm.last_read_timestamp = 0;
-    
     LOG_INFO(SHM_LOG_TAG, "共享内存清理完成");
     return result;
 }

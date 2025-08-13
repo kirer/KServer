@@ -57,10 +57,6 @@ public class Launcher {
             Looper.prepareMainLooper();
             // 初始化服务器（共享内存 + Socket控制层）
             initializeServer();
-            // 创建并启动屏幕截图服务
-            Ln.d("[" + TAG + "] 创建屏幕捕获服务");
-            screenCaptureService = new ScreenCaptureService();
-            screenCaptureService.start();
             // 运行主循环
             Ln.i("[" + TAG + "] 进入主事件循环");
             Looper.loop();
@@ -220,33 +216,43 @@ public class Launcher {
             // 1. 加载native库
             Ln.d("[" + TAG + "] 加载库文件: " + CONFIG.getLibPath() + "/libserver-k.so");
             System.load(CONFIG.getLibPath() + "/libserver-k.so");
-            Ln.d("[" + TAG + "] 库文件加载完成");
-            // 2. 初始化共享内存数据层（永远存在）
-            Ln.d("[" + TAG + "] 初始化共享内存数据层");
-            CONFIG.setMemorySize(ScreenCaptureService.getScreenshotMemorySize());
-            int result = ShareMemory.create(CONFIG.getMemorySize());
-            if (result != 0) {
-                throw new RuntimeException("共享内存创建失败，错误码: " + result);
-            }
-            Ln.d("[" + TAG + "] 数据层：共享内存已就绪, 大小: " + CONFIG.getMemorySize() + " 字节");
-            // 3. 准备初始化Socket控制层服务器
+            Ln.i("[" + TAG + "] 库文件加载完成");
+            // 2. 准备初始化Socket控制层服务器
             Ln.d("[" + TAG + "] 准备初始化" + CONFIG.getSocketType() + "控制层服务器");
-            result = Server.initialize(Mode.getModeValue(CONFIG.getSocketType()), CONFIG.getAddress(), CONFIG.getMemorySize(), CONFIG.isDebug());
+            int result = Server.initialize(Mode.getModeValue(CONFIG.getSocketType()), CONFIG.getAddress(), CONFIG.isDebug());
             if (result != 0) {
                 throw new RuntimeException("服务器初始化失败，错误码: " + result);
             }
-            Ln.d("[" + TAG + "] 控制层：" + CONFIG.getSocketType() + " Socket服务器已就绪");
-            // 4. 启动服务器
+            Ln.i("[" + TAG + "] 控制层：" + CONFIG.getSocketType() + " Socket服务器已就绪");
+            // 3. 启动服务器
             Ln.d("[" + TAG + "] 启动" + CONFIG.getSocketType() + "控制层服务器");
             result = Server.start();
             if (result != 0) {
                 throw new RuntimeException("服务器启动失败，错误码: " + result);
             }
-            Ln.d("[" + TAG + "] 控制层：" + CONFIG.getSocketType() + " Socket服务器已启动");
+            Server.setMessageCallback(new Server.ServerMessageListener() {
+                @Override
+                public void onMessage(int type, byte[] data) {
+                    Ln.d("[" + TAG + "] 收到控制层消息: " + type);
+                    switch (type) {
+                        case Server.MSG_TYPE_INIT_SCREEN_CAPTURE:
+                            Ln.d("[" + TAG + "] 启动屏幕捕获服务");
+                            try {
+                                screenCaptureService = new ScreenCaptureService();
+                                screenCaptureService.start();
+                            } catch (Exception e) {
+                                Ln.e("[" + TAG + "] 启动屏幕捕获服务失败", e);
+                            }
+                            break;
+                    }
+                }
+            });
+            Ln.i("[" + TAG + "] 控制层：" + CONFIG.getSocketType() + " Socket服务器已启动");
             Ln.i("[" + TAG + "] Server-K服务器初始化完成");
         } catch (Exception e) {
             throw new RuntimeException("服务器初始化失败", e);
         }
+
     }
 
     /**
